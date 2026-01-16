@@ -1,5 +1,4 @@
 @import "tailwindcss";
-@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;500;600;700;900&family=Nanum+Gothic:wght@400;700;800&display=swap');
 
 :root {
   /* Korean Traditional Colors */
@@ -30,13 +29,8 @@
   --neutral: #FBBF24;
 }
 
-@theme inline {
-  --font-serif: 'Noto Serif KR', serif;
-  --font-sans: 'Nanum Gothic', sans-serif;
-}
-
 .font-serif {
-  font-family: 'Noto Serif KR', serif;
+  font-family: var(--font-serif);
 }
 
 * {
@@ -46,7 +40,7 @@
 body {
   background: var(--bg-dark);
   color: var(--text-primary);
-  font-family: 'Nanum Gothic', sans-serif;
+  font-family: var(--font-sans);
   min-height: 100vh;
   overflow-x: hidden;
 }

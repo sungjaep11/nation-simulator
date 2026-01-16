@@ -453,7 +453,7 @@ export default function Home() {
               <div className="flex items-center gap-3">
                 <span className="text-3xl">⚔️</span>
                 <h1 className="text-2xl font-bold text-[#C9A227] font-serif">
-                  삼국지 - 천하통일
+                  국가권력급 시뮬레이터
                 </h1>
               </div>
             )}
