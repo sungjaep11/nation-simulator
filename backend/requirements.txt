@@ -3,9 +3,7 @@ pydantic==2.12.5
 pydantic_core==2.41.5
 requests==2.32.5
 uvicorn==0.40.0
-google-auth==2.47.0
-google-genai==1.59.0
 transformers>=4.40.0
 torch>=2.0.0
 accelerate>=0.20.0
-bitsandbytes>=0.41.0
+sqlmodel>=0.0.14
