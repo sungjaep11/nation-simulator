@@ -9,13 +9,48 @@ import {
 import * as topojson from "topojson-client";
 import type { Topology, GeometryCollection } from "topojson-specification";
 
+// 북한 지역명 한글 매핑
+const northKoreaNameMap: Record<string, string> = {
+  "Chagang-do": "자강도",
+  "Hamgyŏng-bukto": "함경북도",
+  "Hamgyŏng-namdo": "함경남도",
+  "Hwanghae-bukto": "황해북도",
+  "Hwanghae-namdo": "황해남도",
+  "Kaesŏng": "개성특별시",
+  "Kangwŏn-do": "강원도",
+  "Kumgangsan": "금강산",
+  "Namp'o": "남포특별시",
+  "P'yŏngan-bukto": "평안북도",
+  "P'yŏngan-namdo": "평안남도",
+  "P'yŏngyang": "평양직할시",
+  "Rasŏn": "라선특별시",
+  "Ryanggang": "량강도",
+  "Sinŭiju": "신의주시",
+};
+
 // 시도별 삼국 영토 매핑
 const provinceToKingdom: Record<string, "goguryeo" | "baekje" | "silla" | "neutral"> = {
-  // 고구려 영토 (북부)
+  // 고구려 영토 (북한 지역)
+  "자강도": "goguryeo",
+  "함경북도": "goguryeo",
+  "함경남도": "goguryeo",
+  "황해북도": "goguryeo",
+  "황해남도": "goguryeo",
+  "개성특별시": "goguryeo",
+  "강원도": "goguryeo",
+  "금강산": "goguryeo",
+  "남포특별시": "goguryeo",
+  "평안북도": "goguryeo",
+  "평안남도": "goguryeo",
+  "평양직할시": "goguryeo",
+  "라선특별시": "goguryeo",
+  "량강도": "goguryeo",
+  "신의주시": "goguryeo",
+  
+  // 고구려 영토 (남한 북부)
   "서울특별시": "goguryeo",
   "인천광역시": "goguryeo",
   "경기도": "goguryeo",
-  "강원도": "goguryeo",
   "강원특별자치도": "goguryeo",
   
   // 백제 영토 (서남부)
@@ -74,14 +109,17 @@ interface KoreaMapProps {
   onTerritoryClick?: (territory: Territory) => void;
 }
 
-// 로컬 TopoJSON 파일 경로
+// 로컬 지도 파일 경로
 const KOREA_TOPO_JSON = "/korea-provinces.json";
+const NORTH_KOREA_GEO_JSON = "/north-korea-provinces.json";
 
 interface ProvinceProperties {
-  code: string;
-  name: string;
-  name_eng: string;
-  base_year: string;
+  code?: string;
+  name?: string;
+  name_eng?: string;
+  base_year?: string;
+  NAME_1?: string;
+  VARNAME_1?: string;
 }
 
 const KoreaMap = memo(function KoreaMap({
@@ -90,6 +128,7 @@ const KoreaMap = memo(function KoreaMap({
 }: KoreaMapProps) {
   const [hoveredProvince, setHoveredProvince] = useState<string | null>(null);
   const [topoData, setTopoData] = useState<Topology | null>(null);
+  const [northKoreaData, setNorthKoreaData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -111,7 +150,26 @@ const KoreaMap = memo(function KoreaMap({
     }
   };
 
+  // 북한 지역명을 한글로 변환
+  const getProvinceName = (properties: ProvinceProperties): string => {
+    if (properties.name) return properties.name;
+    if (properties.NAME_1) {
+      return northKoreaNameMap[properties.NAME_1] || properties.NAME_1;
+    }
+    if (properties.VARNAME_1) {
+      return northKoreaNameMap[properties.VARNAME_1] || properties.VARNAME_1;
+    }
+    return "Unknown";
+  };
+
   useEffect(() => {
+    let loaded = 0;
+    const checkLoaded = () => {
+      loaded++;
+      if (loaded >= 2) setLoading(false);
+    };
+
+    // 남한 데이터 로드
     fetch(KOREA_TOPO_JSON)
       .then(response => {
         if (!response.ok) {
@@ -121,12 +179,28 @@ const KoreaMap = memo(function KoreaMap({
       })
       .then(data => {
         setTopoData(data as Topology);
-        setLoading(false);
+        checkLoaded();
       })
       .catch(err => {
-        console.error("Failed to load map data:", err);
-        setError(err.message);
-        setLoading(false);
+        console.error("Failed to load South Korea map data:", err);
+        checkLoaded();
+      });
+
+    // 북한 데이터 로드
+    fetch(NORTH_KOREA_GEO_JSON)
+      .then(response => {
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        return response.json();
+      })
+      .then(data => {
+        setNorthKoreaData(data);
+        checkLoaded();
+      })
+      .catch(err => {
+        console.error("Failed to load North Korea map data:", err);
+        checkLoaded();
       });
   }, []);
 
@@ -151,7 +225,7 @@ const KoreaMap = memo(function KoreaMap({
     );
   }
 
-  if (error || !geoData) {
+  if ((error || !geoData) && !northKoreaData) {
     return (
       <div className="w-full h-full flex items-center justify-center text-[#A89F91] text-sm">
         <div className="text-center">
@@ -167,58 +241,113 @@ const KoreaMap = memo(function KoreaMap({
       <ComposableMap
         projection="geoMercator"
         projectionConfig={{
-          scale: 5500,
-          center: [127.8, 35.9],
+          scale: 3200,
+          center: [127.5, 38.0],
         }}
         style={{
           width: "100%",
           height: "100%",
         }}
       >
-        <Geographies geography={geoData}>
-          {({ geographies }) =>
-            geographies.map((geo) => {
-              const provinceName = geo.properties.name;
-              const owner = getOwner(provinceName);
-              const colors = kingdomColors[owner];
-              const isHovered = hoveredProvince === provinceName;
+        {/* 북한 지도 */}
+        {northKoreaData && (
+          <Geographies geography={northKoreaData}>
+            {({ geographies }) =>
+              geographies.map((geo) => {
+                const provinceName = getProvinceName(geo.properties);
+                if (provinceName === "Unknown") return null;
+                
+                const owner = getOwner(provinceName);
+                const colors = kingdomColors[owner];
+                const isHovered = hoveredProvince === provinceName;
 
-              return (
-                <Geography
-                  key={geo.rsmKey}
-                  geography={geo}
-                  fill={isHovered ? colors.hover : colors.default}
-                  stroke={colors.stroke}
-                  strokeWidth={1}
-                  style={{
-                    default: {
-                      outline: "none",
-                      transition: "all 0.2s ease",
-                    },
-                    hover: {
-                      outline: "none",
-                      cursor: "pointer",
-                    },
-                    pressed: {
-                      outline: "none",
-                    },
-                  }}
-                  onMouseEnter={() => setHoveredProvince(provinceName)}
-                  onMouseLeave={() => setHoveredProvince(null)}
-                  onClick={() => {
-                    if (onTerritoryClick) {
-                      onTerritoryClick({
-                        id: geo.rsmKey,
-                        name: provinceName,
-                        owner: owner,
-                      });
-                    }
-                  }}
-                />
-              );
-            })
-          }
-        </Geographies>
+                return (
+                  <Geography
+                    key={`nk-${geo.rsmKey}`}
+                    geography={geo}
+                    fill={isHovered ? colors.hover : colors.default}
+                    stroke={colors.stroke}
+                    strokeWidth={1}
+                    style={{
+                      default: {
+                        outline: "none",
+                        transition: "all 0.2s ease",
+                      },
+                      hover: {
+                        outline: "none",
+                        cursor: "pointer",
+                      },
+                      pressed: {
+                        outline: "none",
+                      },
+                    }}
+                    onMouseEnter={() => setHoveredProvince(provinceName)}
+                    onMouseLeave={() => setHoveredProvince(null)}
+                    onClick={() => {
+                      if (onTerritoryClick) {
+                        onTerritoryClick({
+                          id: geo.rsmKey,
+                          name: provinceName,
+                          owner: owner,
+                        });
+                      }
+                    }}
+                  />
+                );
+              })
+            }
+          </Geographies>
+        )}
+
+        {/* 남한 지도 */}
+        {geoData && (
+          <Geographies geography={geoData}>
+            {({ geographies }) =>
+              geographies.map((geo) => {
+                const provinceName = geo.properties.name || "Unknown";
+                if (provinceName === "Unknown") return null;
+                
+                const owner = getOwner(provinceName);
+                const colors = kingdomColors[owner];
+                const isHovered = hoveredProvince === provinceName;
+
+                return (
+                  <Geography
+                    key={`sk-${geo.rsmKey}`}
+                    geography={geo}
+                    fill={isHovered ? colors.hover : colors.default}
+                    stroke={colors.stroke}
+                    strokeWidth={1}
+                    style={{
+                      default: {
+                        outline: "none",
+                        transition: "all 0.2s ease",
+                      },
+                      hover: {
+                        outline: "none",
+                        cursor: "pointer",
+                      },
+                      pressed: {
+                        outline: "none",
+                      },
+                    }}
+                    onMouseEnter={() => setHoveredProvince(provinceName)}
+                    onMouseLeave={() => setHoveredProvince(null)}
+                    onClick={() => {
+                      if (onTerritoryClick) {
+                        onTerritoryClick({
+                          id: geo.rsmKey,
+                          name: provinceName,
+                          owner: owner,
+                        });
+                      }
+                    }}
+                  />
+                );
+              })
+            }
+          </Geographies>
+        )}
       </ComposableMap>
 
       {/* 호버 툴팁 */}
