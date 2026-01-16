@@ -1,26 +1,368 @@
 @import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;500;600;700;900&family=Nanum+Gothic:wght@400;700;800&display=swap');
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Korean Traditional Colors */
+  --goguryeo-primary: #8B0000;
+  --goguryeo-secondary: #DC143C;
+  --goguryeo-accent: #FFD700;
+  
+  --baekje-primary: #DAA520;
+  --baekje-secondary: #F4A460;
+  --baekje-accent: #FFEFD5;
+  
+  --silla-primary: #1E3A5F;
+  --silla-secondary: #4169E1;
+  --silla-accent: #87CEEB;
+  
+  /* UI Colors */
+  --bg-dark: #0D0D0D;
+  --bg-panel: #1A1A1A;
+  --bg-card: #252525;
+  --border-gold: #C9A227;
+  --text-primary: #F5F5DC;
+  --text-secondary: #A89F91;
+  --text-muted: #6B6B6B;
+  
+  /* Status Colors */
+  --positive: #4ADE80;
+  --negative: #F87171;
+  --neutral: #FBBF24;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-serif: 'Noto Serif KR', serif;
+  --font-sans: 'Nanum Gothic', sans-serif;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+.font-serif {
+  font-family: 'Noto Serif KR', serif;
+}
+
+* {
+  box-sizing: border-box;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--bg-dark);
+  color: var(--text-primary);
+  font-family: 'Nanum Gothic', sans-serif;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* Scrollbar Styling */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-panel);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-gold);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #D4AF37;
+}
+
+/* Animated Number Counter */
+@keyframes countUp {
+  from {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes countDown {
+  from {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes pulse-glow {
+  0%, 100% {
+    box-shadow: 0 0 5px rgba(201, 162, 39, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 20px rgba(201, 162, 39, 0.6);
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes borderGlow {
+  0%, 100% {
+    border-color: rgba(201, 162, 39, 0.3);
+  }
+  50% {
+    border-color: rgba(201, 162, 39, 0.8);
+  }
+}
+
+.animate-count-up {
+  animation: countUp 0.4s ease-out;
+}
+
+.animate-count-down {
+  animation: countDown 0.4s ease-out;
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+.animate-shimmer {
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(201, 162, 39, 0.1),
+    transparent
+  );
+  background-size: 200% 100%;
+  animation: shimmer 3s infinite;
+}
+
+.animate-fade-in-up {
+  animation: fadeInUp 0.5s ease-out forwards;
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.5s ease-out forwards;
+}
+
+.animate-slide-in-right {
+  animation: slideInRight 0.5s ease-out forwards;
+}
+
+.animate-border-glow {
+  animation: borderGlow 2s ease-in-out infinite;
+}
+
+/* Delay utilities */
+.delay-100 { animation-delay: 100ms; }
+.delay-200 { animation-delay: 200ms; }
+.delay-300 { animation-delay: 300ms; }
+.delay-400 { animation-delay: 400ms; }
+.delay-500 { animation-delay: 500ms; }
+
+/* Traditional Korean Pattern Background */
+.korean-pattern {
+  background-image: 
+    radial-gradient(circle at 25% 25%, rgba(201, 162, 39, 0.03) 1px, transparent 1px),
+    radial-gradient(circle at 75% 75%, rgba(201, 162, 39, 0.03) 1px, transparent 1px);
+  background-size: 30px 30px;
+}
+
+/* Glass morphism panel */
+.glass-panel {
+  background: linear-gradient(
+    135deg,
+    rgba(26, 26, 26, 0.95),
+    rgba(37, 37, 37, 0.9)
+  );
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(201, 162, 39, 0.2);
+}
+
+/* Nation-specific styling */
+.nation-goguryeo {
+  --nation-primary: var(--goguryeo-primary);
+  --nation-secondary: var(--goguryeo-secondary);
+  --nation-accent: var(--goguryeo-accent);
+}
+
+.nation-baekje {
+  --nation-primary: var(--baekje-primary);
+  --nation-secondary: var(--baekje-secondary);
+  --nation-accent: var(--baekje-accent);
+}
+
+.nation-silla {
+  --nation-primary: var(--silla-primary);
+  --nation-secondary: var(--silla-secondary);
+  --nation-accent: var(--silla-accent);
+}
+
+/* Custom button styles */
+.btn-primary {
+  background: linear-gradient(135deg, var(--border-gold), #8B7355);
+  color: var(--bg-dark);
+  font-weight: 700;
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.btn-primary::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.2),
+    transparent
+  );
+  transition: left 0.5s ease;
+}
+
+.btn-primary:hover::before {
+  left: 100%;
+}
+
+.btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 20px rgba(201, 162, 39, 0.4);
+}
+
+/* Input styling */
+.input-field {
+  background: rgba(13, 13, 13, 0.8);
+  border: 1px solid rgba(201, 162, 39, 0.3);
+  color: var(--text-primary);
+  transition: all 0.3s ease;
+}
+
+.input-field:focus {
+  outline: none;
+  border-color: var(--border-gold);
+  box-shadow: 0 0 10px rgba(201, 162, 39, 0.2);
+}
+
+.input-field::placeholder {
+  color: var(--text-muted);
+}
+
+/* Card hover effect */
+.card-hover {
+  transition: all 0.3s ease;
+}
+
+.card-hover:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3);
+  border-color: rgba(201, 162, 39, 0.5);
+}
+
+/* Loading spinner */
+.loading-spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid rgba(201, 162, 39, 0.3);
+  border-top-color: var(--border-gold);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Map territory colors */
+.territory-goguryeo {
+  fill: var(--goguryeo-secondary);
+  stroke: var(--goguryeo-primary);
+  transition: fill 0.5s ease;
+}
+
+.territory-baekje {
+  fill: var(--baekje-primary);
+  stroke: #B8860B;
+  transition: fill 0.5s ease;
+}
+
+.territory-silla {
+  fill: var(--silla-secondary);
+  stroke: var(--silla-primary);
+  transition: fill 0.5s ease;
+}
+
+.territory-neutral {
+  fill: #4A4A4A;
+  stroke: #3A3A3A;
+  transition: fill 0.5s ease;
+}
+
+/* Tooltip */
+.tooltip {
+  position: relative;
+}
+
+.tooltip::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 4px 8px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-gold);
+  border-radius: 4px;
+  font-size: 12px;
+  white-space: nowrap;
+  opacity: 0;
+  visibility: hidden;
+  transition: all 0.2s ease;
+}
+
+.tooltip:hover::after {
+  opacity: 1;
+  visibility: visible;
+  bottom: calc(100% + 5px);
 }
