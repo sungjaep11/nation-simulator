@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, memo, useMemo, useRef } from "react";
+import { useState, useEffect, memo, useMemo } from "react";
 import {
   ComposableMap,
   Geographies,
@@ -48,12 +48,12 @@ const provinceToKingdom: Record<string, "goguryeo" | "baekje" | "silla" | "neutr
   "신의주시": "goguryeo",
   
   // 고구려 영토 (남한 북부)
-  "서울특별시": "goguryeo",
-  "인천광역시": "goguryeo",
-  "경기도": "goguryeo",
   "강원특별자치도": "goguryeo",
   
   // 백제 영토 (서남부)
+  "서울특별시": "baekje",
+  "인천광역시": "baekje",
+  "경기도": "baekje",
   "충청북도": "baekje",
   "충청남도": "baekje",
   "세종특별자치시": "baekje",
@@ -124,13 +124,6 @@ interface ProvinceProperties {
   VARNAME_1?: string;
 }
 
-interface MoneyParticle {
-  id: number;
-  x: number;
-  y: number;
-  delay: number;
-}
-
 const KoreaMap = memo(function KoreaMap({
   territories,
   onTerritoryClick,
@@ -142,9 +135,6 @@ const KoreaMap = memo(function KoreaMap({
   const [northKoreaData, setNorthKoreaData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [moneyParticles, setMoneyParticles] = useState<MoneyParticle[]>([]);
-  const mapContainerRef = useRef<HTMLDivElement>(null);
-  const particleIdRef = useRef(0);
 
   // 영토 데이터가 있으면 해당 데이터 사용, 없으면 기본 매핑 사용
   const getOwner = (provinceName: string): "goguryeo" | "baekje" | "silla" | "neutral" => {
@@ -231,114 +221,6 @@ const KoreaMap = memo(function KoreaMap({
     }
   }, [topoData]);
 
-  // 재정 증가 시 돈 파티클 생성 (자기 나라 영토 위에만)
-  useEffect(() => {
-    if (financeIncrease > 0 && mapContainerRef.current && selectedNation) {
-      // SVG가 렌더링될 때까지 약간의 지연
-      const timeoutId = setTimeout(() => {
-        const container = mapContainerRef.current;
-        if (!container) return;
-        
-        const rect = container.getBoundingClientRect();
-        const svgElement = container.querySelector('svg');
-        
-        // 파티클 개수 결정 (재정 증가량에 비례, 최대 15개)
-        const particleCount = Math.min(15, Math.max(3, Math.floor(financeIncrease / 500) + 3));
-        
-        // 선택된 국가의 영토 위치 (대략적인 영토 중심 및 확산 범위)
-        const territoryPositions = {
-          goguryeo: { centerX: 0.5, centerY: 0.35, spreadX: 0.3, spreadY: 0.35 },
-          baekje: { centerX: 0.35, centerY: 0.65, spreadX: 0.25, spreadY: 0.28 },
-          silla: { centerX: 0.75, centerY: 0.7, spreadX: 0.2, spreadY: 0.22 },
-        };
-        
-        const pos = territoryPositions[selectedNation];
-        const newParticles: MoneyParticle[] = [];
-        
-        // SVG 경계 박스를 사용하여 더 정확한 위치 계산 시도
-        if (svgElement) {
-          try {
-            const paths = svgElement.querySelectorAll(`path[data-owner="${selectedNation}"]`);
-            
-            // 선택된 국가의 영토에 해당하는 경계 박스들 수집
-            const territoryBounds: Array<{ x: number; y: number; width: number; height: number }> = [];
-            
-            // 각 경로의 경계 박스를 확인
-            paths.forEach((pathElement) => {
-              try {
-                const path = pathElement as SVGPathElement;
-                const bbox = path.getBBox();
-                if (bbox.width > 5 && bbox.height > 5) {
-                  // SVG 뷰포트 내의 상대 좌표를 얻기 위해 SVG 요소의 크기 확인
-                  const svgViewBox = svgElement.viewBox.baseVal;
-                  const svgWidth = svgViewBox.width || svgElement.clientWidth;
-                  const svgHeight = svgViewBox.height || svgElement.clientHeight;
-                  
-                  // SVG 뷰포트 좌표를 컨테이너 좌표로 변환
-                  // getBBox()는 SVG 뷰포트 좌표계를 반환하므로 이를 컨테이너 좌표로 변환
-                  const scaleX = rect.width / svgWidth;
-                  const scaleY = rect.height / svgHeight;
-                  
-                  const x = bbox.x * scaleX;
-                  const y = bbox.y * scaleY;
-                  const width = bbox.width * scaleX;
-                  const height = bbox.height * scaleY;
-                  
-                  territoryBounds.push({ x, y, width, height });
-                }
-              } catch (e) {
-                // getBBox 실패 시 무시
-              }
-            });
-            
-            // 영토 경계 박스가 발견된 경우 해당 위치 사용
-            if (territoryBounds.length > 0) {
-              for (let i = 0; i < particleCount; i++) {
-                const bound = territoryBounds[Math.floor(Math.random() * territoryBounds.length)];
-                const x = Math.max(0, Math.min(rect.width, bound.x + Math.random() * bound.width));
-                const y = Math.max(0, Math.min(rect.height, bound.y + Math.random() * bound.height));
-                
-                newParticles.push({
-                  id: particleIdRef.current++,
-                  x,
-                  y,
-                  delay: Math.random() * 300,
-                });
-              }
-            }
-          } catch (e) {
-            // SVG 처리 실패 시 fallback 사용
-          }
-        }
-        
-        // 경계 박스를 찾지 못한 경우 대략적인 위치 사용
-        if (newParticles.length === 0) {
-          for (let i = 0; i < particleCount; i++) {
-            const offsetX = (Math.random() - 0.5) * pos.spreadX;
-            const offsetY = (Math.random() - 0.5) * pos.spreadY;
-            newParticles.push({
-              id: particleIdRef.current++,
-              x: Math.max(0, Math.min(rect.width, rect.width * (pos.centerX + offsetX))),
-              y: Math.max(0, Math.min(rect.height, rect.height * (pos.centerY + offsetY))),
-              delay: Math.random() * 300,
-            });
-          }
-        }
-        
-        if (newParticles.length > 0) {
-          setMoneyParticles((prev) => [...prev, ...newParticles]);
-          
-          // 애니메이션 완료 후 파티클 제거 (2초 + 지연)
-          setTimeout(() => {
-            setMoneyParticles((prev) => prev.filter((p) => !newParticles.includes(p)));
-          }, 2300);
-        }
-      }, 100); // SVG 렌더링 후 100ms 대기
-      
-      return () => clearTimeout(timeoutId);
-    }
-  }, [financeIncrease, selectedNation]);
-
   if (loading) {
     return (
       <div className="w-full h-full flex items-center justify-center">
@@ -359,22 +241,7 @@ const KoreaMap = memo(function KoreaMap({
   }
 
   return (
-    <div ref={mapContainerRef} className="relative w-full h-full overflow-hidden">
-      {/* 돈 파티클 애니메이션 */}
-      {moneyParticles.map((particle) => (
-        <div
-          key={particle.id}
-          className="money-particle"
-          style={{
-            left: `${particle.x}px`,
-            top: `${particle.y}px`,
-            animationDelay: `${particle.delay}ms`,
-          }}
-        >
-          💰
-        </div>
-      ))}
-      
+    <div className="relative w-full h-full overflow-hidden">
       <ComposableMap
         projection="geoMercator"
         projectionConfig={{
@@ -445,6 +312,7 @@ const KoreaMap = memo(function KoreaMap({
               geographies.map((geo) => {
                 const provinceName = geo.properties.name || "Unknown";
                 if (provinceName === "Unknown") return null;
+                if (provinceName === "제주특별자치도") return null;
                 
                 const owner = getOwner(provinceName);
                 const colors = kingdomColors[owner];
