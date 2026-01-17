@@ -3,6 +3,56 @@
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 
+// 타자기 효과 컴포넌트
+function Typewriter({ 
+  text, 
+  delay = 0, 
+  speed = 50,
+  className = "",
+  style = {}
+}: { 
+  text: string; 
+  delay?: number; 
+  speed?: number;
+  className?: string;
+  style?: React.CSSProperties;
+}) {
+  const [displayedText, setDisplayedText] = useState("");
+  const [started, setStarted] = useState(false);
+
+  useEffect(() => {
+    const startTimer = setTimeout(() => {
+      setStarted(true);
+    }, delay);
+    return () => clearTimeout(startTimer);
+  }, [delay]);
+
+  useEffect(() => {
+    if (!started) return;
+    
+    let currentIndex = 0;
+    const interval = setInterval(() => {
+      if (currentIndex <= text.length) {
+        setDisplayedText(text.slice(0, currentIndex));
+        currentIndex++;
+      } else {
+        clearInterval(interval);
+      }
+    }, speed);
+
+    return () => clearInterval(interval);
+  }, [started, text, speed]);
+
+  return (
+    <span className={className} style={style}>
+      {displayedText}
+      {started && displayedText.length < text.length && (
+        <span className="animate-pulse">|</span>
+      )}
+    </span>
+  );
+}
+
 interface Nation {
   id: string;
   name: string;
@@ -70,6 +120,7 @@ export default function SelectionPage() {
   const [isExiting, setIsExiting] = useState(false);
   const [isFadingOut, setIsFadingOut] = useState(false);
   const [isFadingIn, setIsFadingIn] = useState(true);
+  const [isKingsEnding, setIsKingsEnding] = useState(false);
   const dystopiaVideoRef = useRef<HTMLVideoElement>(null);
   const introVideoRef = useRef<HTMLVideoElement>(null);
 
@@ -82,13 +133,13 @@ export default function SelectionPage() {
     }
   }, [videoPhase]);
 
-  // 트랜지션 처리: 3초 대기 후 kings 영상으로
+  // 트랜지션 처리: 4초 대기 후 kings 영상으로
   useEffect(() => {
     if (videoPhase === 'transition') {
       const timer = setTimeout(() => {
         setIsFadingIn(true);
         setVideoPhase('intro');
-      }, 3000);
+      }, 4000);
       return () => clearTimeout(timer);
     }
   }, [videoPhase]);
@@ -119,7 +170,11 @@ export default function SelectionPage() {
   };
 
   const handleIntroEnd = () => {
-    setVideoPhase('selection');
+    if (isKingsEnding) return;
+    setIsKingsEnding(true);
+    setTimeout(() => {
+      setVideoPhase('selection');
+    }, 800);
   };
 
   const handleSelectNation = (nationId: string) => {
@@ -138,39 +193,90 @@ export default function SelectionPage() {
   // dystopia 영상
   if (videoPhase === 'dystopia') {
     return (
-      <div className="h-screen w-screen flex items-center justify-center overflow-hidden bg-black">
+      <div 
+        className="h-screen w-screen flex items-center justify-center overflow-hidden bg-black relative cursor-pointer"
+        onClick={handleDystopiaEnd}
+      >
         <video
           ref={dystopiaVideoRef}
           src="/selection/dystopia.mp4"
           autoPlay
-          muted
           playsInline
           onEnded={handleDystopiaEnd}
-          className={`w-full h-full object-cover transition-opacity ${isFadingOut ? 'opacity-0' : 'opacity-100'}`}
+          className={`w-full h-full object-cover transition-opacity ${isFadingOut ? 'opacity-0' : 'opacity-100'} pointer-events-none`}
           style={{ transitionDuration: '2s' }}
         />
+        
+        {/* 자막 */}
+        <div className={`absolute bottom-0 left-0 right-0 pb-16 px-8 transition-opacity duration-1000 ${isFadingOut ? 'opacity-0' : 'opacity-100'}`}>
+          <div className="max-w-4xl mx-auto text-center">
+            <p className="text-white text-lg md:text-xl font-medium mb-3 drop-shadow-lg"
+               style={{ textShadow: '2px 2px 8px rgba(0,0,0,0.9)' }}>
+              <Typewriter text="기원전 57년, 한반도" delay={300} speed={40} />
+            </p>
+            <p className="text-white/90 text-base md:text-lg leading-relaxed drop-shadow-lg"
+               style={{ textShadow: '2px 2px 8px rgba(0,0,0,0.9)' }}>
+              <Typewriter text="중국 한나라의 지배가 무너지고, 수많은 부족이 패권을 다투던 시대." delay={1200} speed={30} />
+            </p>
+            <p className="text-white/90 text-base md:text-lg leading-relaxed drop-shadow-lg mt-2"
+               style={{ textShadow: '2px 2px 8px rgba(0,0,0,0.9)' }}>
+              <Typewriter text="전쟁과 기근, 약탈이 끊이지 않았고... 백성들은 지쳐가고 있었다." delay={3500} speed={30} />
+            </p>
+            <p className="text-white/90 text-base md:text-lg leading-relaxed drop-shadow-lg mt-2"
+               style={{ textShadow: '2px 2px 8px rgba(0,0,0,0.9)' }}>
+              <Typewriter text="혼란의 시대, 누군가는 이 땅을 하나로 통일해야 했다." delay={5500} speed={30} />
+            </p>
+          </div>
+        </div>
       </div>
     );
   }
 
-  // 트랜지션 (까만 화면)
+  // 트랜지션 (까만 화면 + 영웅 등장 텍스트)
   if (videoPhase === 'transition') {
     return (
-      <div className="h-screen w-screen bg-black" />
+      <div className="h-screen w-screen bg-black flex items-center justify-center">
+        <div className="text-center px-8">
+          <p className="text-[#C9A227] text-xl md:text-2xl font-serif mb-6 animate-fade-in"
+             style={{ animationDelay: '0.5s' }}>
+            그리고, 세 명의 영웅이 나타났다.
+          </p>
+          <div className="space-y-4">
+            <p className="text-white text-lg md:text-xl animate-fade-in"
+               style={{ animationDelay: '1.2s' }}>
+              <span className="text-[#C41E3A] font-bold">고구려</span>의 <span className="text-[#C41E3A]">주몽</span>
+            </p>
+            <p className="text-white text-lg md:text-xl animate-fade-in"
+               style={{ animationDelay: '1.6s' }}>
+              <span className="text-[#1E90FF] font-bold">백제</span>의 <span className="text-[#1E90FF]">온조</span>
+            </p>
+            <p className="text-white text-lg md:text-xl animate-fade-in"
+               style={{ animationDelay: '2s' }}>
+              <span className="text-[#FFD700] font-bold">신라</span>의 <span className="text-[#FFD700]">박혁거세</span>
+            </p>
+          </div>
+          <p className="text-white/80 text-base md:text-lg mt-8 animate-fade-in"
+             style={{ animationDelay: '2.5s' }}>
+            삼국통일을 향한 대서사시가 시작된다.
+          </p>
+        </div>
+      </div>
     );
   }
 
   // kings 영상
   if (videoPhase === 'intro') {
     return (
-      <div className="h-screen w-screen flex items-center justify-center overflow-hidden bg-black">
+      <div 
+        className={`h-screen w-screen flex items-center justify-center overflow-hidden bg-black cursor-pointer transition-all duration-700 ease-in-out ${isKingsEnding ? 'opacity-0 translate-x-[100px]' : 'opacity-100 translate-x-0'}`}
+        onClick={() => !isFadingIn && handleIntroEnd()}
+      >
         <video
           ref={introVideoRef}
           src="/selection/kings.mp4"
-          muted
           playsInline
           onEnded={handleIntroEnd}
-          className={`w-full h-full object-cover transition-opacity ${isFadingIn ? 'opacity-0' : 'opacity-100'}`}
+          className={`w-full h-full object-cover transition-opacity pointer-events-none ${isFadingIn ? 'opacity-0' : 'opacity-100'}`}
           style={{ transitionDuration: '2s' }}
         />
       </div>
@@ -179,7 +285,7 @@ export default function SelectionPage() {
 
   return (
     <div 
-      className={`h-screen bg-[#0D0D0D] flex items-start justify-center overflow-hidden transition-opacity duration-500 pt-16 ${isExiting ? 'opacity-0' : 'opacity-100'}`}
+      className={`h-screen bg-[#0D0D0D] flex items-start justify-center overflow-hidden pt-16 transition-opacity duration-500 ${isExiting ? 'opacity-0' : 'opacity-100'}`}
       style={{
         backgroundImage: 'url(/selection/temple.png)',
         backgroundSize: 'cover',
