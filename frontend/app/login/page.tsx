@@ -31,8 +31,17 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen w-full flex items-center justify-center bg-[#0D0D0D] korean-pattern">
-      <div className="w-full max-w-md px-6">
+    <div 
+      className="min-h-screen w-full flex items-center justify-center"
+      style={{
+        backgroundImage: 'url(/selection/temple.png)',
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        backgroundRepeat: 'no-repeat',
+      }}
+    >
+      <div className="absolute inset-0 bg-[#0D0D0D]/60"></div>
+      <div className="relative z-10 w-full max-w-md px-6">
         <div className="glass-panel rounded-lg p-8 animate-fade-in-up">
           {/* Header */}
           <div className="text-center mb-8">

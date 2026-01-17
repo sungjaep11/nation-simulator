@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { useSearchParams } from "next/navigation";
 import KoreaMap from "../components/KoreaMap";
 
 // 국가 타입 정의
@@ -225,75 +226,6 @@ function NewsCard({ news, index }: { news: NewsItem; index: number }) {
   );
 }
 
-// 국가 선택 버튼 컴포넌트
-function NationSelectButton({
-  nation,
-  name,
-  description,
-  selected,
-  onSelect,
-  index,
-}: {
-  nation: NationType;
-  name: string;
-  description: string;
-  selected: boolean;
-  onSelect: () => void;
-  index: number;
-}) {
-  const nationStyles = {
-    goguryeo: {
-      bg: "from-[#8B0000] to-[#DC143C]",
-      border: "border-[#DC143C]",
-      shadow: "shadow-[#DC143C]/30",
-      icon: "🏔️",
-    },
-    baekje: {
-      bg: "from-[#8B7355] to-[#DAA520]",
-      border: "border-[#DAA520]",
-      shadow: "shadow-[#DAA520]/30",
-      icon: "🌊",
-    },
-    silla: {
-      bg: "from-[#1E3A5F] to-[#4169E1]",
-      border: "border-[#4169E1]",
-      shadow: "shadow-[#4169E1]/30",
-      icon: "👑",
-    },
-  };
-
-  const style = nation ? nationStyles[nation] : nationStyles.goguryeo;
-
-  return (
-    <button
-      onClick={onSelect}
-      className={`
-        relative overflow-hidden rounded-2xl p-6 text-left transition-all duration-500
-        bg-gradient-to-br ${style.bg} ${style.border} border-2
-        ${selected ? `scale-105 ${style.shadow} shadow-2xl` : "opacity-70 hover:opacity-100 hover:scale-102"}
-        animate-fade-in-up opacity-0
-      `}
-      style={{ animationDelay: `${index * 200}ms`, animationFillMode: "forwards" }}
-    >
-      <div className="absolute top-0 right-0 w-32 h-32 opacity-10 text-8xl">
-        {style.icon}
-      </div>
-      <div className="relative z-10">
-        <span className="text-4xl mb-3 block">{style.icon}</span>
-        <h3 className="text-2xl font-bold text-white font-serif mb-2">
-          {name}
-        </h3>
-        <p className="text-sm text-white/80 leading-relaxed">{description}</p>
-      </div>
-      {selected && (
-        <div className="absolute top-3 right-3 w-6 h-6 bg-white rounded-full flex items-center justify-center">
-          <span className="text-green-600 text-sm">✓</span>
-        </div>
-      )}
-    </button>
-  );
-}
-
 // 외교 정보 컴포넌트
 function DiplomacyInfo({ selectedNation }: { selectedNation: NationType }) {
   const relations = {
@@ -391,8 +323,10 @@ function MilitaryInfo({ selectedNation }: { selectedNation: NationType }) {
 }
 
 export default function Home() {
-  const [selectedNation, setSelectedNation] = useState<NationType>(null);
-  const [gameStarted, setGameStarted] = useState(false);
+  const searchParams = useSearchParams();
+  const nationFromUrl = searchParams.get("nation") as NationType;
+  
+  const [selectedNation, setSelectedNation] = useState<NationType>(nationFromUrl);
   const [turn, setTurn] = useState(1);
   const [stats, setStats] = useState<GameStats>({
     finance: 10000,
@@ -451,12 +385,6 @@ export default function Home() {
     },
   };
 
-  const handleStartGame = () => {
-    if (selectedNation) {
-      setGameStarted(true);
-    }
-  };
-
   const handleCommand = useCallback(async () => {
     if (!commandInput.trim() || isLoading) return;
 
@@ -509,7 +437,7 @@ export default function Home() {
 
   // 재정 변화 감지
   useEffect(() => {
-    if (prevFinanceRef.current < stats.finance && gameStarted) {
+    if (prevFinanceRef.current < stats.finance) {
       const diff = stats.finance - prevFinanceRef.current;
       if (diff > 0) {
         setFinanceIncrease(diff);
@@ -517,7 +445,7 @@ export default function Home() {
       }
     }
     prevFinanceRef.current = stats.finance;
-  }, [stats.finance, gameStarted]);
+  }, [stats.finance]);
 
   const totalScore =
     Math.floor(stats.finance / 100) +
@@ -532,12 +460,33 @@ export default function Home() {
     setMounted(true);
   }, []);
 
+  // URL에서 국가가 전달되면 자동으로 설정
+  useEffect(() => {
+    if (nationFromUrl) {
+      setSelectedNation(nationFromUrl);
+    }
+  }, [nationFromUrl]);
+
   if (!mounted) {
     return (
       <div className="min-h-screen bg-[#0d0d0d] flex items-center justify-center">
         <div className="text-center">
           <div className="loading-spinner mx-auto mb-4" style={{ width: "40px", height: "40px" }}></div>
           <p className="text-[#C9A227]">로딩 중...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // 국가가 선택되지 않았으면 선택 페이지로 안내
+  if (!selectedNation) {
+    return (
+      <div className="min-h-screen bg-[#0d0d0d] flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-[#C9A227] text-xl mb-4">국가를 먼저 선택해주세요</p>
+          <a href="/selection" className="px-8 py-3 bg-[#C9A227] text-[#0d0d0d] rounded-xl font-bold hover:bg-[#D4AF37] transition-all">
+            국가 선택하러 가기
+          </a>
         </div>
       </div>
     );
@@ -550,41 +499,28 @@ export default function Home() {
         <div className="max-w-[1800px] mx-auto flex items-center justify-between">
           {/* 국가 정보 */}
           <div className="flex items-center gap-4">
-            {selectedNation && gameStarted ? (
-              <>
-                <span className="text-4xl">
-                  {nationInfo[selectedNation].flag}
-                </span>
-                <div>
-                  <h1 className="text-xl font-bold text-[#C9A227] font-serif">
-                    {nationInfo[selectedNation].name}
-                  </h1>
-                  <p className="text-xs text-[#A89F91]">
-                    제 {turn}대 군주
-                  </p>
-                </div>
-              </>
-            ) : (
-              <div className="flex items-center gap-3">
-                <span className="text-3xl">⚔️</span>
-                <h1 className="text-2xl font-bold text-[#C9A227] font-serif">
-                  국가권력급 시뮬레이터
-                </h1>
-              </div>
-            )}
+            <span className="text-4xl">
+              {nationInfo[selectedNation].flag}
+            </span>
+            <div>
+              <h1 className="text-xl font-bold text-[#C9A227] font-serif">
+                {nationInfo[selectedNation].name}
+              </h1>
+              <p className="text-xs text-[#A89F91]">
+                제 {turn}대 군주
+              </p>
+            </div>
           </div>
 
           {/* 수치 데이터 */}
-          {gameStarted && (
-            <div className="flex items-center gap-3 animate-fade-in">
-              <StatItem icon="💰" label="재정" value={stats.finance} prefix="$" />
-              <StatItem icon="👥" label="인구" value={stats.population} />
-              <StatItem icon="😊" label="행복도" value={stats.happiness} suffix="%" />
-              <StatItem icon="⚔️" label="군사력" value={stats.military} />
-              <div className="h-10 w-px bg-[#C9A227]/30 mx-2" />
-              <StatItem icon="🏆" label="총합 점수" value={totalScore} />
-            </div>
-          )}
+          <div className="flex items-center gap-3 animate-fade-in">
+            <StatItem icon="💰" label="재정" value={stats.finance} prefix="$" />
+            <StatItem icon="👥" label="인구" value={stats.population} />
+            <StatItem icon="😊" label="행복도" value={stats.happiness} suffix="%" />
+            <StatItem icon="⚔️" label="군사력" value={stats.military} />
+            <div className="h-10 w-px bg-[#C9A227]/30 mx-2" />
+            <StatItem icon="🏆" label="총합 점수" value={totalScore} />
+          </div>
         </div>
       </header>
 
@@ -592,77 +528,7 @@ export default function Home() {
       <div className="flex-1 flex overflow-hidden">
         {/* ③ 중앙 메인 화면 (Story & News) */}
         <main className="flex-1 p-6 overflow-y-auto">
-          {!gameStarted ? (
-            /* 초기 접속: 게임 개요 및 국가 선택 */
-            <div className="max-w-4xl mx-auto">
-              {/* 게임 소개 */}
-              <div className="text-center mb-12 animate-fade-in">
-                <h2 className="text-4xl font-bold text-[#C9A227] font-serif mb-4">
-                  천하통일의 대업을 이루어라
-                </h2>
-                <p className="text-lg text-[#A89F91] leading-relaxed max-w-2xl mx-auto">
-                  서기 4세기, 한반도는 고구려, 백제, 신라 세 나라로 나뉘어 패권을
-                  다투고 있었다. 그대는 이 중 하나의 군주가 되어 백성을 이끌고,
-                  외교와 전쟁을 통해 천하 통일의 위업을 달성해야 한다.
-                </p>
-              </div>
-
-              {/* 국가 선택 */}
-              <div className="mb-8">
-                <h3 className="text-xl font-bold text-[#F5F5DC] font-serif mb-6 text-center">
-                  국가를 선택하세요
-                </h3>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  <NationSelectButton
-                    nation="goguryeo"
-                    name="고구려"
-                    description={nationInfo.goguryeo.description}
-                    selected={selectedNation === "goguryeo"}
-                    onSelect={() => setSelectedNation("goguryeo")}
-                    index={0}
-                  />
-                  <NationSelectButton
-                    nation="baekje"
-                    name="백제"
-                    description={nationInfo.baekje.description}
-                    selected={selectedNation === "baekje"}
-                    onSelect={() => setSelectedNation("baekje")}
-                    index={1}
-                  />
-                  <NationSelectButton
-                    nation="silla"
-                    name="신라"
-                    description={nationInfo.silla.description}
-                    selected={selectedNation === "silla"}
-                    onSelect={() => setSelectedNation("silla")}
-                    index={2}
-                  />
-                </div>
-              </div>
-
-              {/* 게임 시작 버튼 */}
-              <div className="text-center animate-fade-in-up opacity-0" style={{ animationDelay: "600ms", animationFillMode: "forwards" }}>
-                <button
-                  onClick={handleStartGame}
-                  disabled={!selectedNation}
-                  className={`
-                    px-12 py-4 rounded-xl text-lg font-bold font-serif
-                    transition-all duration-300 relative overflow-hidden
-                    ${
-                      selectedNation
-                        ? "btn-primary cursor-pointer"
-                        : "bg-[#333] text-[#666] cursor-not-allowed"
-                    }
-                  `}
-                >
-                  {selectedNation
-                    ? `${nationInfo[selectedNation].name}로 시작하기`
-                    : "국가를 선택하세요"}
-                </button>
-              </div>
-            </div>
-          ) : (
-            /* 진행 중: 현재 상황, 뉴스, 명령 로그 */
+            {/* 진행 중: 현재 상황, 뉴스, 명령 로그 */}
             <div className="max-w-4xl mx-auto space-y-6">
               {/* 현재 상황 요약 */}
               <section className="glass-panel rounded-xl p-6 animate-fade-in">
@@ -725,7 +591,6 @@ export default function Home() {
                 </div>
               </section>
             </div>
-          )}
       </main>
 
         {/* ② 우측 패널 (Navigation & Info) */}
@@ -777,11 +642,7 @@ export default function Home() {
 
             {/* 탭 컨텐츠 */}
             <div className="min-h-[150px]">
-              {!gameStarted ? (
-                <p className="text-[#6B6B6B] text-sm text-center py-8">
-                  게임을 시작하면 정보가 표시됩니다
-                </p>
-              ) : activeTab === "diplomacy" ? (
+              {activeTab === "diplomacy" ? (
                 <DiplomacyInfo selectedNation={selectedNation} />
               ) : (
                 <MilitaryInfo selectedNation={selectedNation} />
@@ -792,7 +653,6 @@ export default function Home() {
       </div>
 
       {/* ④ 하단 입력창 (Control) */}
-      {gameStarted && (
         <footer className="w-full bg-gradient-to-r from-[#1a1a1a] via-[#252525] to-[#1a1a1a] border-t border-[#C9A227]/30 px-6 py-4 animate-fade-in">
           <div className="max-w-4xl mx-auto flex gap-4">
             <div className="flex-1 relative">
@@ -828,7 +688,6 @@ export default function Home() {
             </button>
           </div>
         </footer>
-      )}
     </div>
   );
 }

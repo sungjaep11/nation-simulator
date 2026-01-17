@@ -65,26 +65,65 @@ const nations: Nation[] = [
 
 export default function SelectionPage() {
   const router = useRouter();
-  const [showVideo, setShowVideo] = useState(true);
+  const [videoPhase, setVideoPhase] = useState<'dystopia' | 'transition' | 'intro' | 'selection'>('dystopia');
   const [selectedNation, setSelectedNation] = useState<string | null>(null);
   const [isExiting, setIsExiting] = useState(false);
-  const videoRef = useRef<HTMLVideoElement>(null);
+  const [isFadingOut, setIsFadingOut] = useState(false);
+  const [isFadingIn, setIsFadingIn] = useState(true);
+  const dystopiaVideoRef = useRef<HTMLVideoElement>(null);
+  const introVideoRef = useRef<HTMLVideoElement>(null);
 
   // 비디오 자동 재생
   useEffect(() => {
-    if (showVideo && videoRef.current) {
-      videoRef.current.play().catch(() => {
-        setShowVideo(false);
+    if (videoPhase === 'dystopia' && dystopiaVideoRef.current) {
+      dystopiaVideoRef.current.play().catch(() => {
+        setVideoPhase('transition');
       });
     }
-  }, [showVideo]);
+  }, [videoPhase]);
 
-  const handleVideoEnd = () => {
-    setShowVideo(false);
+  // 트랜지션 처리: 3초 대기 후 kings 영상으로
+  useEffect(() => {
+    if (videoPhase === 'transition') {
+      const timer = setTimeout(() => {
+        setIsFadingIn(true);
+        setVideoPhase('intro');
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [videoPhase]);
+
+  // kings 영상: fade in 완료 후 재생 시작
+  useEffect(() => {
+    if (videoPhase === 'intro' && isFadingIn && introVideoRef.current) {
+      // fade in 완료 후 영상 재생
+      const timer = setTimeout(() => {
+        setIsFadingIn(false);
+        if (introVideoRef.current) {
+          introVideoRef.current.currentTime = 0;
+          introVideoRef.current.play().catch(() => {
+            setVideoPhase('selection');
+          });
+        }
+      }, 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [videoPhase, isFadingIn]);
+
+  const handleDystopiaEnd = () => {
+    setIsFadingOut(true);
+    setTimeout(() => {
+      setIsFadingOut(false);
+      setVideoPhase('transition');
+    }, 2000); // fade out 2초
+  };
+
+  const handleIntroEnd = () => {
+    setVideoPhase('selection');
   };
 
   const handleSelectNation = (nationId: string) => {
-    setSelectedNation(nationId);
+    setSelectedNation(prev => prev === nationId ? null : nationId);
   };
 
   const handleConfirm = () => {
@@ -96,28 +135,43 @@ export default function SelectionPage() {
     }
   };
 
-  // 인트로 영상
-  if (showVideo) {
+  // dystopia 영상
+  if (videoPhase === 'dystopia') {
     return (
-      <div 
-        className="h-screen w-screen flex items-center justify-center overflow-hidden"
-        style={{
-          backgroundImage: 'url(/selection/temple.png)',
-          backgroundSize: 'cover',
-          backgroundPosition: 'center',
-          backgroundRepeat: 'no-repeat',
-        }}
-      >
-        <div className="absolute inset-0 bg-black/60"></div>
-        
+      <div className="h-screen w-screen flex items-center justify-center overflow-hidden bg-black">
         <video
-          ref={videoRef}
-          src="/selection/intro.mp4"
+          ref={dystopiaVideoRef}
+          src="/selection/dystopia.mp4"
           autoPlay
           muted
           playsInline
-          onEnded={handleVideoEnd}
-          className="relative z-10 max-w-6xl max-h-[85vh] w-auto h-auto rounded-xl shadow-2xl"
+          onEnded={handleDystopiaEnd}
+          className={`w-full h-full object-cover transition-opacity ${isFadingOut ? 'opacity-0' : 'opacity-100'}`}
+          style={{ transitionDuration: '2s' }}
+        />
+      </div>
+    );
+  }
+
+  // 트랜지션 (까만 화면)
+  if (videoPhase === 'transition') {
+    return (
+      <div className="h-screen w-screen bg-black" />
+    );
+  }
+
+  // kings 영상
+  if (videoPhase === 'intro') {
+    return (
+      <div className="h-screen w-screen flex items-center justify-center overflow-hidden bg-black">
+        <video
+          ref={introVideoRef}
+          src="/selection/kings.mp4"
+          muted
+          playsInline
+          onEnded={handleIntroEnd}
+          className={`w-full h-full object-cover transition-opacity ${isFadingIn ? 'opacity-0' : 'opacity-100'}`}
+          style={{ transitionDuration: '2s' }}
         />
       </div>
     );
@@ -125,7 +179,7 @@ export default function SelectionPage() {
 
   return (
     <div 
-      className={`h-screen bg-[#0D0D0D] flex items-center justify-center overflow-hidden transition-opacity duration-500 ${isExiting ? 'opacity-0' : 'opacity-100'}`}
+      className={`h-screen bg-[#0D0D0D] flex items-start justify-center overflow-hidden transition-opacity duration-500 pt-16 ${isExiting ? 'opacity-0' : 'opacity-100'}`}
       style={{
         backgroundImage: 'url(/selection/temple.png)',
         backgroundSize: 'cover',
@@ -149,86 +203,110 @@ export default function SelectionPage() {
 
         {/* 국가 카드들 */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          {nations.map((nation) => (
-            <button
-              key={nation.id}
-              onClick={() => handleSelectNation(nation.id)}
-              className={`
-                relative rounded-2xl p-6 transition-all duration-300 text-left
-                backdrop-blur-xl border-2 shadow-2xl
-                ${selectedNation === nation.id 
-                  ? 'border-[#C9A227] scale-105 bg-[#1a1a1a]/80' 
-                  : 'border-white/10 hover:border-white/30 bg-[#1a1a1a]/50 hover:bg-[#1a1a1a]/70'
-                }
-              `}
-            >
-              {/* 선택 표시 */}
-              {selectedNation === nation.id && (
-                <div className="absolute top-4 right-4 w-6 h-6 bg-[#C9A227] rounded-full flex items-center justify-center">
-                  <span className="text-black text-sm">✓</span>
+          {nations.map((nation) => {
+            const isExpanded = selectedNation === nation.id;
+            return (
+              <button
+                key={nation.id}
+                onClick={() => handleSelectNation(nation.id)}
+                className={`
+                  relative rounded-2xl transition-all duration-500 text-left
+                  backdrop-blur-xl border-2 shadow-2xl
+                  ${isExpanded 
+                    ? 'border-[#C9A227] scale-105 bg-[#1a1a1a]/80 p-6' 
+                    : 'border-white/10 hover:border-white/30 bg-[#1a1a1a]/50 hover:bg-[#1a1a1a]/70 p-4 scale-95'
+                  }
+                `}
+              >
+                {/* 선택 표시 */}
+                {isExpanded && (
+                  <div className="absolute top-4 right-4 w-6 h-6 bg-[#C9A227] rounded-full flex items-center justify-center">
+                    <span className="text-black text-sm">✓</span>
+                  </div>
+                )}
+
+                {/* 아이콘 & 이름 (항상 표시) */}
+                <div className={`flex items-center gap-4 ${isExpanded ? 'mb-4' : 'mb-0'}`}>
+                  <span className="text-5xl">{nation.icon}</span>
+                  <div>
+                    <h2 className="text-2xl font-bold text-white">{nation.name}</h2>
+                    <p className="text-sm" style={{ color: nation.color }}>{nation.title}</p>
+                  </div>
                 </div>
-              )}
 
-              {/* 아이콘 & 이름 */}
-              <div className="flex items-center gap-4 mb-4">
-                <span className="text-5xl">{nation.icon}</span>
-                <div>
-                  <h2 className="text-2xl font-bold text-white">{nation.name}</h2>
-                  <p className="text-sm" style={{ color: nation.color }}>{nation.title}</p>
-                </div>
-              </div>
-
-              {/* 설명 */}
-              <p className="text-[#A89F91] text-sm mb-4 leading-relaxed">
-                {nation.description}
-              </p>
-
-              {/* 특징 배지 */}
-              <div className="mb-4">
-                <span 
-                  className="inline-block px-3 py-1 rounded-full text-xs font-medium"
-                  style={{ backgroundColor: `${nation.color}20`, color: nation.color, border: `1px solid ${nation.color}50` }}
+                {/* 확장 시 상세 내용 */}
+                <div 
+                  className={`overflow-hidden transition-all duration-500 ease-in-out ${
+                    isExpanded ? 'max-h-96 opacity-100 mt-4' : 'max-h-0 opacity-0 mt-0'
+                  }`}
                 >
-                  {nation.feature}
-                </span>
-              </div>
+                  {/* 설명 */}
+                  <p className="text-[#A89F91] text-sm mb-4 leading-relaxed">
+                    {nation.description}
+                  </p>
 
-              {/* 스탯 */}
-              <div className="grid grid-cols-3 gap-2 text-center">
-                <div className="bg-black/30 rounded-lg p-2">
-                  <p className="text-[#FFD700] text-sm font-bold">{nation.stats.gold.toLocaleString()}</p>
-                  <p className="text-[#6B6B6B] text-xs">재정</p>
+                  {/* 특징 배지 */}
+                  <div className="mb-4">
+                    <span 
+                      className="inline-block px-3 py-1 rounded-full text-xs font-medium"
+                      style={{ backgroundColor: `${nation.color}20`, color: nation.color, border: `1px solid ${nation.color}50` }}
+                    >
+                      {nation.feature}
+                    </span>
+                  </div>
+
+                  {/* 스탯 */}
+                  <div className="grid grid-cols-3 gap-2 text-center">
+                    <div className="bg-black/30 rounded-lg p-2">
+                      <p className="text-[#FFD700] text-sm font-bold">{nation.stats.gold.toLocaleString()}</p>
+                      <p className="text-[#6B6B6B] text-xs">재정</p>
+                    </div>
+                    <div className="bg-black/30 rounded-lg p-2">
+                      <p className="text-[#90EE90] text-sm font-bold">{nation.stats.population.toLocaleString()}</p>
+                      <p className="text-[#6B6B6B] text-xs">인구</p>
+                    </div>
+                    <div className="bg-black/30 rounded-lg p-2">
+                      <p className="text-[#FF6B6B] text-sm font-bold">{nation.stats.military.toLocaleString()}</p>
+                      <p className="text-[#6B6B6B] text-xs">군사력</p>
+                    </div>
+                  </div>
                 </div>
-                <div className="bg-black/30 rounded-lg p-2">
-                  <p className="text-[#90EE90] text-sm font-bold">{nation.stats.population.toLocaleString()}</p>
-                  <p className="text-[#6B6B6B] text-xs">인구</p>
-                </div>
-                <div className="bg-black/30 rounded-lg p-2">
-                  <p className="text-[#FF6B6B] text-sm font-bold">{nation.stats.military.toLocaleString()}</p>
-                  <p className="text-[#6B6B6B] text-xs">군사력</p>
-                </div>
-              </div>
-            </button>
-          ))}
+
+                {/* 미선택 시 클릭 안내 */}
+                {!isExpanded && (
+                  <p className="text-[#6B6B6B] text-xs mt-3 text-center">클릭하여 상세 보기</p>
+                )}
+              </button>
+            );
+          })}
         </div>
 
         {/* 확인 버튼 */}
         <div className="text-center">
-          <button
-            onClick={handleConfirm}
-            disabled={!selectedNation}
-            className={`
-              px-12 py-4 rounded-xl font-bold text-lg transition-all duration-300
-              ${selectedNation
-                ? 'bg-[#C9A227] hover:bg-[#D4AF37] text-[#0D0D0D] shadow-lg hover:shadow-xl'
-                : 'bg-[#333] text-[#6B6B6B] cursor-not-allowed'
-              }
-            `}
-          >
-            {selectedNation 
-              ? `${nations.find(n => n.id === selectedNation)?.name}로 시작하기` 
-              : '국가를 선택해주세요'}
-          </button>
+          {(() => {
+            const selectedNationData = nations.find(n => n.id === selectedNation);
+            return (
+              <button
+                onClick={handleConfirm}
+                disabled={!selectedNation}
+                className={`
+                  px-12 py-4 rounded-xl font-bold text-lg transition-all duration-300
+                  ${selectedNation
+                    ? 'shadow-lg hover:shadow-xl hover:brightness-110'
+                    : 'bg-[#333] text-[#6B6B6B] cursor-not-allowed'
+                  }
+                `}
+                style={selectedNation && selectedNationData ? {
+                  backgroundColor: selectedNationData.color,
+                  color: selectedNationData.id === 'silla' ? '#0D0D0D' : '#FFFFFF',
+                } : {}}
+              >
+                {selectedNation 
+                  ? `${selectedNationData?.name}로 시작하기` 
+                  : '국가를 선택해주세요'}
+              </button>
+            );
+          })()}
         </div>
       </div>
     </div>

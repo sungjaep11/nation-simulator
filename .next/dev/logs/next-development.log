@@ -1,0 +1,342 @@
+[00:00:00.678] Server  LOG     ✓ Ready in 500ms
+[00:00:01.362] Server  ERROR   ⨯ ./app/globals.css:860:8
+Parsing CSS source code failed
+  858 |   }
+  859 | }
+> 860 | @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;500;600;700;900&family=Nanum+Gothic:wght@400;700;800&display=swap');
+      |        ^
+  861 | :root {
+  862 |   --goguryeo-primary: #8B0000;
+  863 |   --goguryeo-secondary: #DC143C;
+
+@import rules must precede all rules aside from @charset and @layer statements
+
+Import trace:
+  Client Component Browser:
+    ./app/globals.css [Client Component Browser]
+    ./app/layout.tsx [Server Component]
+
+
+[00:00:01.579] Browser ERROR   uncaughtError: Error: ./app/globals.css:860:8
+Parsing CSS source code failed
+  858 |   }
+  859 | }
+> 860 | @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;500;600;700;900&family=Nanum+Gothic:wght@400;700;800&display=swap');
+      |        ^
+  861 | :root {
+  862 |   --goguryeo-primary: #8B0000;
+  863 |   --goguryeo-secondary: #DC143C;
+
+@import rules must precede all rules aside from @charset and @layer statements
+
+Import trace:
+  Client Component Browser:
+    ./app/globals.css [Client Component Browser]
+    ./app/layout.tsx [Server Component]
+
+
+[00:00:01.725] Browser ERROR   ./app/globals.css:860:8
+Parsing CSS source code failed
+  858 |   }
+  859 | }
+> 860 | @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;500;600;700;900&family=Nanum+Gothic:wght@400;700;800&display=swap');
+      |        ^
+  861 | :root {
+  862 |   --goguryeo-primary: #8B0000;
+  863 |   --goguryeo-secondary: #DC143C;
+
+@import rules must precede all rules aside from @charset and @layer statements
+
+Import trace:
+  Client Component Browser:
+    ./app/globals.css [Client Component Browser]
+    ./app/layout.tsx [Server Component]
+[00:00:01.725] Browser ERROR   ./app/globals.css:860:8
+Parsing CSS source code failed
+  858 |   }
+  859 | }
+> 860 | @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;500;600;700;900&family=Nanum+Gothic:wght@400;700;800&display=swap');
+      |        ^
+  861 | :root {
+  862 |   --goguryeo-primary: #8B0000;
+  863 |   --goguryeo-secondary: #DC143C;
+
+@import rules must precede all rules aside from @charset and @layer statements
+
+Import trace:
+  Client Component Browser:
+    ./app/globals.css [Client Component Browser]
+    ./app/layout.tsx [Server Component]
+[00:00:04.531] Server  ERROR   ⨯ ./app/globals.css:860:8
+Parsing CSS source code failed
+  858 |   }
+  859 | }
+> 860 | @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;500;600;700;900&family=Nanum+Gothic:wght@400;700;800&display=swap');
+      |        ^
+  861 | :root {
+  862 |   --goguryeo-primary: #8B0000;
+  863 |   --goguryeo-secondary: #DC143C;
+
+@import rules must precede all rules aside from @charset and @layer statements
+
+Import trace:
+  Client Component Browser:
+    ./app/globals.css [Client Component Browser]
+    ./app/layout.tsx [Server Component]
+
+
+[00:00:04.601] Browser ERROR   uncaughtError: Error: ./app/globals.css:860:8
+Parsing CSS source code failed
+  858 |   }
+  859 | }
+> 860 | @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;500;600;700;900&family=Nanum+Gothic:wght@400;700;800&display=swap');
+      |        ^
+  861 | :root {
+  862 |   --goguryeo-primary: #8B0000;
+  863 |   --goguryeo-secondary: #DC143C;
+
+@import rules must precede all rules aside from @charset and @layer statements
+
+Import trace:
+  Client Component Browser:
+    ./app/globals.css [Client Component Browser]
+    ./app/layout.tsx [Server Component]
+
+
+[00:00:04.741] Browser ERROR   ./app/globals.css:860:8
+Parsing CSS source code failed
+  858 |   }
+  859 | }
+> 860 | @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;500;600;700;900&family=Nanum+Gothic:wght@400;700;800&display=swap');
+      |        ^
+  861 | :root {
+  862 |   --goguryeo-primary: #8B0000;
+  863 |   --goguryeo-secondary: #DC143C;
+
+@import rules must precede all rules aside from @charset and @layer statements
+
+Import trace:
+  Client Component Browser:
+    ./app/globals.css [Client Component Browser]
+    ./app/layout.tsx [Server Component]
+[00:00:04.741] Browser ERROR   ./app/globals.css:860:8
+Parsing CSS source code failed
+  858 |   }
+  859 | }
+> 860 | @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;500;600;700;900&family=Nanum+Gothic:wght@400;700;800&display=swap');
+      |        ^
+  861 | :root {
+  862 |   --goguryeo-primary: #8B0000;
+  863 |   --goguryeo-secondary: #DC143C;
+
+@import rules must precede all rules aside from @charset and @layer statements
+
+Import trace:
+  Client Component Browser:
+    ./app/globals.css [Client Component Browser]
+    ./app/layout.tsx [Server Component]
+[00:00:05.252] Server  ERROR   ⨯ ./app/globals.css:860:8
+Parsing CSS source code failed
+  858 |   }
+  859 | }
+> 860 | @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;500;600;700;900&family=Nanum+Gothic:wght@400;700;800&display=swap');
+      |        ^
+  861 | :root {
+  862 |   --goguryeo-primary: #8B0000;
+  863 |   --goguryeo-secondary: #DC143C;
+
+@import rules must precede all rules aside from @charset and @layer statements
+
+Import trace:
+  Client Component Browser:
+    ./app/globals.css [Client Component Browser]
+    ./app/layout.tsx [Server Component]
+
+
+[00:00:05.321] Browser ERROR   uncaughtError: Error: ./app/globals.css:860:8
+Parsing CSS source code failed
+  858 |   }
+  859 | }
+> 860 | @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;500;600;700;900&family=Nanum+Gothic:wght@400;700;800&display=swap');
+      |        ^
+  861 | :root {
+  862 |   --goguryeo-primary: #8B0000;
+  863 |   --goguryeo-secondary: #DC143C;
+
+@import rules must precede all rules aside from @charset and @layer statements
+
+Import trace:
+  Client Component Browser:
+    ./app/globals.css [Client Component Browser]
+    ./app/layout.tsx [Server Component]
+
+
+[00:00:05.465] Browser ERROR   ./app/globals.css:860:8
+Parsing CSS source code failed
+  858 |   }
+  859 | }
+> 860 | @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;500;600;700;900&family=Nanum+Gothic:wght@400;700;800&display=swap');
+      |        ^
+  861 | :root {
+  862 |   --goguryeo-primary: #8B0000;
+  863 |   --goguryeo-secondary: #DC143C;
+
+@import rules must precede all rules aside from @charset and @layer statements
+
+Import trace:
+  Client Component Browser:
+    ./app/globals.css [Client Component Browser]
+    ./app/layout.tsx [Server Component]
+[00:00:05.465] Browser ERROR   ./app/globals.css:860:8
+Parsing CSS source code failed
+  858 |   }
+  859 | }
+> 860 | @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;500;600;700;900&family=Nanum+Gothic:wght@400;700;800&display=swap');
+      |        ^
+  861 | :root {
+  862 |   --goguryeo-primary: #8B0000;
+  863 |   --goguryeo-secondary: #DC143C;
+
+@import rules must precede all rules aside from @charset and @layer statements
+
+Import trace:
+  Client Component Browser:
+    ./app/globals.css [Client Component Browser]
+    ./app/layout.tsx [Server Component]
+[00:00:05.491] Server  ERROR   ⨯ ./app/globals.css:860:8
+Parsing CSS source code failed
+  858 |   }
+  859 | }
+> 860 | @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;500;600;700;900&family=Nanum+Gothic:wght@400;700;800&display=swap');
+      |        ^
+  861 | :root {
+  862 |   --goguryeo-primary: #8B0000;
+  863 |   --goguryeo-secondary: #DC143C;
+
+@import rules must precede all rules aside from @charset and @layer statements
+
+Import trace:
+  Client Component Browser:
+    ./app/globals.css [Client Component Browser]
+    ./app/layout.tsx [Server Component]
+
+
+[00:00:05.566] Browser ERROR   uncaughtError: Error: ./app/globals.css:860:8
+Parsing CSS source code failed
+  858 |   }
+  859 | }
+> 860 | @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;500;600;700;900&family=Nanum+Gothic:wght@400;700;800&display=swap');
+      |        ^
+  861 | :root {
+  862 |   --goguryeo-primary: #8B0000;
+  863 |   --goguryeo-secondary: #DC143C;
+
+@import rules must precede all rules aside from @charset and @layer statements
+
+Import trace:
+  Client Component Browser:
+    ./app/globals.css [Client Component Browser]
+    ./app/layout.tsx [Server Component]
+
+
+[00:00:05.705] Browser ERROR   ./app/globals.css:860:8
+Parsing CSS source code failed
+  858 |   }
+  859 | }
+> 860 | @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;500;600;700;900&family=Nanum+Gothic:wght@400;700;800&display=swap');
+      |        ^
+  861 | :root {
+  862 |   --goguryeo-primary: #8B0000;
+  863 |   --goguryeo-secondary: #DC143C;
+
+@import rules must precede all rules aside from @charset and @layer statements
+
+Import trace:
+  Client Component Browser:
+    ./app/globals.css [Client Component Browser]
+    ./app/layout.tsx [Server Component]
+[00:00:05.705] Browser ERROR   ./app/globals.css:860:8
+Parsing CSS source code failed
+  858 |   }
+  859 | }
+> 860 | @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;500;600;700;900&family=Nanum+Gothic:wght@400;700;800&display=swap');
+      |        ^
+  861 | :root {
+  862 |   --goguryeo-primary: #8B0000;
+  863 |   --goguryeo-secondary: #DC143C;
+
+@import rules must precede all rules aside from @charset and @layer statements
+
+Import trace:
+  Client Component Browser:
+    ./app/globals.css [Client Component Browser]
+    ./app/layout.tsx [Server Component]
+[00:00:05.715] Server  ERROR   ⨯ ./app/globals.css:860:8
+Parsing CSS source code failed
+  858 |   }
+  859 | }
+> 860 | @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;500;600;700;900&family=Nanum+Gothic:wght@400;700;800&display=swap');
+      |        ^
+  861 | :root {
+  862 |   --goguryeo-primary: #8B0000;
+  863 |   --goguryeo-secondary: #DC143C;
+
+@import rules must precede all rules aside from @charset and @layer statements
+
+Import trace:
+  Client Component Browser:
+    ./app/globals.css [Client Component Browser]
+    ./app/layout.tsx [Server Component]
+
+
+[00:00:05.782] Browser ERROR   uncaughtError: Error: ./app/globals.css:860:8
+Parsing CSS source code failed
+  858 |   }
+  859 | }
+> 860 | @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;500;600;700;900&family=Nanum+Gothic:wght@400;700;800&display=swap');
+      |        ^
+  861 | :root {
+  862 |   --goguryeo-primary: #8B0000;
+  863 |   --goguryeo-secondary: #DC143C;
+
+@import rules must precede all rules aside from @charset and @layer statements
+
+Import trace:
+  Client Component Browser:
+    ./app/globals.css [Client Component Browser]
+    ./app/layout.tsx [Server Component]
+
+
+[00:00:05.920] Browser ERROR   ./app/globals.css:860:8
+Parsing CSS source code failed
+  858 |   }
+  859 | }
+> 860 | @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;500;600;700;900&family=Nanum+Gothic:wght@400;700;800&display=swap');
+      |        ^
+  861 | :root {
+  862 |   --goguryeo-primary: #8B0000;
+  863 |   --goguryeo-secondary: #DC143C;
+
+@import rules must precede all rules aside from @charset and @layer statements
+
+Import trace:
+  Client Component Browser:
+    ./app/globals.css [Client Component Browser]
+    ./app/layout.tsx [Server Component]
+[00:00:05.920] Browser ERROR   ./app/globals.css:860:8
+Parsing CSS source code failed
+  858 |   }
+  859 | }
+> 860 | @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;500;600;700;900&family=Nanum+Gothic:wght@400;700;800&display=swap');
+      |        ^
+  861 | :root {
+  862 |   --goguryeo-primary: #8B0000;
+  863 |   --goguryeo-secondary: #DC143C;
+
+@import rules must precede all rules aside from @charset and @layer statements
+
+Import trace:
+  Client Component Browser:
+    ./app/globals.css [Client Component Browser]
+    ./app/layout.tsx [Server Component]
+[00:01:11.733] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
