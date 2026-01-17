@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import KoreaMap from "./components/KoreaMap";
 
 // 국가 타입 정의
@@ -27,8 +27,88 @@ interface CommandLog {
   timestamp: Date;
 }
 
-// 애니메이션 숫자 카운터 컴포넌트
-function AnimatedNumber({
+// 슬롯머신 단일 자릿수 컴포넌트
+function SlotDigit({ 
+  digit, 
+  delay = 0,
+  animate = false 
+}: { 
+  digit: string; 
+  delay?: number;
+  animate?: boolean;
+}) {
+  const [targetDigit, setTargetDigit] = useState(digit);
+  const [spinning, setSpinning] = useState(false);
+  const prevDigit = useRef(digit);
+  const isFirstMount = useRef(true);
+
+  useEffect(() => {
+    const shouldAnimate = animate || (prevDigit.current !== digit) || isFirstMount.current;
+    
+    if (shouldAnimate && /\d/.test(digit)) {
+      // 애니메이션 시작 전에 targetDigit 설정
+      if (prevDigit.current !== digit) {
+        setTargetDigit(digit);
+      }
+      
+      setSpinning(true);
+
+      // 애니메이션 종료
+      const endTimeout = setTimeout(() => {
+        setSpinning(false);
+        prevDigit.current = digit;
+        isFirstMount.current = false;
+      }, delay + 800);
+
+      return () => {
+        clearTimeout(endTimeout);
+      };
+    } else {
+      setTargetDigit(digit);
+      if (prevDigit.current !== digit) {
+        prevDigit.current = digit;
+      }
+    }
+  }, [digit, delay, animate]);
+
+  // 숫자가 아닌 경우 (콤마 등)
+  if (!/\d/.test(digit)) {
+    return <span className="slot-separator">{digit}</span>;
+  }
+
+  const digitNum = parseInt(targetDigit, 10);
+  // 슬롯 효과: 목표 숫자 위치로 이동 (2바퀴 돌고 + 목표 위치)
+  // 30개 숫자 중 목표 위치 계산 (각 숫자 높이 = 전체의 1/30)
+  const totalDigits = 30;
+  const targetIndex = spinning ? 20 + digitNum : digitNum;
+  const offset = (targetIndex / totalDigits) * 100;
+
+  return (
+    <span className="slot-digit-wrapper">
+      <span 
+        className={`slot-digit-reel ${spinning ? 'spinning' : ''}`}
+        style={{ 
+          transform: `translateY(-${offset}%)`,
+          transitionDelay: spinning ? `${delay}ms` : '0ms',
+        }}
+      >
+        {/* 3번 반복 (2바퀴 + 여유분) */}
+        {[...Array(3)].map((_, cycle) => (
+          <span key={cycle} className="slot-digit-cycle">
+            {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
+              <span key={`${cycle}-${num}`} className="slot-digit-item">
+                {num}
+              </span>
+            ))}
+          </span>
+        ))}
+      </span>
+    </span>
+  );
+}
+
+// 슬롯머신 숫자 컴포넌트
+function RollingNumber({
   value,
   prefix = "",
   suffix = "",
@@ -37,36 +117,45 @@ function AnimatedNumber({
   prefix?: string;
   suffix?: string;
 }) {
-  const [displayValue, setDisplayValue] = useState(value);
-  const [animating, setAnimating] = useState(false);
-  const [direction, setDirection] = useState<"up" | "down">("up");
+  const [triggerAnimation, setTriggerAnimation] = useState(false);
+  const prevValue = useRef(value);
+  const isFirstRender = useRef(true);
 
   useEffect(() => {
-    if (displayValue !== value) {
-      setDirection(value > displayValue ? "up" : "down");
-      setAnimating(true);
-      const timeout = setTimeout(() => {
-        setDisplayValue(value);
-        setAnimating(false);
-      }, 400);
-      return () => clearTimeout(timeout);
+    if (isFirstRender.current) {
+      // 첫 렌더링 시 애니메이션
+      isFirstRender.current = false;
+      setTriggerAnimation(true);
+      const timer = setTimeout(() => setTriggerAnimation(false), 1500);
+      return () => clearTimeout(timer);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
+    if (prevValue.current !== value) {
+      // 값 변경 시 애니메이션
+      setTriggerAnimation(true);
+      prevValue.current = value;
+      const timer = setTimeout(() => setTriggerAnimation(false), 1500);
+      return () => clearTimeout(timer);
+    }
   }, [value]);
 
+  const formattedValue = value.toLocaleString();
+  const digits = formattedValue.split('');
+
   return (
-    <span
-      className={`inline-block ${
-        animating
-          ? direction === "up"
-            ? "animate-count-up text-[#4ADE80]"
-            : "animate-count-down text-[#F87171]"
-          : ""
-      }`}
-    >
-      {prefix}
-      {displayValue.toLocaleString()}
-      {suffix}
+    <span className="slot-number">
+      {prefix && <span className="slot-prefix">{prefix}</span>}
+      <span className="slot-digits">
+        {digits.map((digit, index) => (
+          <SlotDigit
+            key={`${index}-${digits.length}`}
+            digit={digit}
+            delay={index * 80}
+            animate={triggerAnimation}
+          />
+        ))}
+      </span>
+      {suffix && <span className="slot-suffix">{suffix}</span>}
     </span>
   );
 }
@@ -93,7 +182,7 @@ function StatItem({
           {label}
         </span>
         <span className="font-bold text-[#F5F5DC] font-serif">
-          <AnimatedNumber value={value} prefix={prefix} suffix={suffix} />
+          <RollingNumber value={value} prefix={prefix} suffix={suffix} />
         </span>
       </div>
     </div>
@@ -314,6 +403,8 @@ export default function Home() {
   const [commandInput, setCommandInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [commandLogs, setCommandLogs] = useState<CommandLog[]>([]);
+  const [financeIncrease, setFinanceIncrease] = useState(0);
+  const prevFinanceRef = useRef(stats.finance);
   const [news, setNews] = useState<NewsItem[]>([
     {
       id: 1,
@@ -393,16 +484,40 @@ export default function Home() {
     setCommandLogs((prev) => [...prev, newLog]);
 
     // 랜덤하게 스탯 변경
-    setStats((prev) => ({
-      finance: prev.finance + Math.floor(Math.random() * 2000) - 1000,
-      population: prev.population + Math.floor(Math.random() * 10000) - 5000,
-      happiness: Math.min(100, Math.max(0, prev.happiness + Math.floor(Math.random() * 20) - 10)),
-      military: prev.military + Math.floor(Math.random() * 2000) - 1000,
-    }));
+    setStats((prev) => {
+      const newFinance = prev.finance + Math.floor(Math.random() * 2000) - 1000;
+      const financeDiff = newFinance - prev.finance;
+      
+      // 재정이 증가했을 때만 애니메이션 트리거
+      if (financeDiff > 0) {
+        setFinanceIncrease(financeDiff);
+        // 3초 후 리셋
+        setTimeout(() => setFinanceIncrease(0), 3000);
+      }
+      
+      return {
+        finance: newFinance,
+        population: prev.population + Math.floor(Math.random() * 10000) - 5000,
+        happiness: Math.min(100, Math.max(0, prev.happiness + Math.floor(Math.random() * 20) - 10)),
+        military: prev.military + Math.floor(Math.random() * 2000) - 1000,
+      };
+    });
 
     setTurn((prev) => prev + 1);
     setIsLoading(false);
   }, [commandInput, isLoading]);
+
+  // 재정 변화 감지
+  useEffect(() => {
+    if (prevFinanceRef.current < stats.finance && gameStarted) {
+      const diff = stats.finance - prevFinanceRef.current;
+      if (diff > 0) {
+        setFinanceIncrease(diff);
+        setTimeout(() => setFinanceIncrease(0), 3000);
+      }
+    }
+    prevFinanceRef.current = stats.finance;
+  }, [stats.finance, gameStarted]);
 
   const totalScore =
     Math.floor(stats.finance / 100) +
@@ -614,7 +729,7 @@ export default function Home() {
       </main>
 
         {/* ② 우측 패널 (Navigation & Info) */}
-        <aside className="w-80 bg-[#1a1a1a] border-l border-[#C9A227]/20 flex flex-col">
+        <aside className="w-[450px] bg-[#1a1a1a] border-l border-[#C9A227]/20 flex flex-col">
           {/* 상단: 턴 수 표시 */}
           <div className="p-4 border-b border-[#C9A227]/20 bg-gradient-to-r from-[#252525] to-[#1a1a1a]">
             <div className="text-center">
@@ -622,18 +737,15 @@ export default function Home() {
                 현재 턴
               </p>
               <p className="text-3xl font-bold text-[#C9A227] font-serif">
-                {turn}
+                <RollingNumber value={turn} />
               </p>
             </div>
           </div>
 
           {/* 중앙: 지도 */}
           <div className="flex-1 p-4 border-b border-[#C9A227]/20">
-            <h4 className="text-sm font-bold text-[#F5F5DC] mb-3 flex items-center gap-2">
-              <span>🗺️</span> 영토 현황
-            </h4>
-            <div className="h-[350px] bg-[#0d0d0d] rounded-xl p-2 border border-[#C9A227]/10">
-              <KoreaMap />
+            <div className="h-[350px] bg-[#0d0d0d] rounded-xl p-2 border border-[#C9A227]/10 relative">
+              <KoreaMap financeIncrease={financeIncrease} selectedNation={selectedNation} />
             </div>
           </div>
 

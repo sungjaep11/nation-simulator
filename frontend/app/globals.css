@@ -360,3 +360,118 @@ body {
   visibility: visible;
   bottom: calc(100% + 5px);
 }
+
+/* Slot Machine Number Animation */
+.slot-number {
+  display: inline-flex;
+  align-items: center;
+  vertical-align: middle;
+}
+
+.slot-prefix,
+.slot-suffix {
+  display: inline-block;
+}
+
+.slot-digits {
+  display: inline-flex;
+  align-items: center;
+}
+
+.slot-separator {
+  display: inline-block;
+  width: 0.25em;
+  text-align: center;
+}
+
+.slot-digit-wrapper {
+  display: inline-block;
+  height: 1.2em;
+  width: 0.6em;
+  overflow: hidden;
+  position: relative;
+  vertical-align: middle;
+}
+
+.slot-digit-reel {
+  display: block;
+  position: relative;
+  width: 100%;
+  will-change: transform;
+  transition: transform 0.8s cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+.slot-digit-reel.spinning {
+  transition: transform 0.8s cubic-bezier(0.12, 0.8, 0.3, 1);
+}
+
+.slot-digit-cycle {
+  display: block;
+  position: relative;
+}
+
+.slot-digit-item {
+  display: block;
+  height: 1.2em;
+  line-height: 1.2em;
+  text-align: center;
+  min-height: 1.2em;
+}
+
+/* 스피닝 중 블러 효과 */
+.slot-digit-reel.spinning .slot-digit-item {
+  filter: blur(0.5px);
+  opacity: 0.9;
+}
+
+/* 스피닝 완료 후 하이라이트 */
+.slot-digit-reel:not(.spinning) .slot-digit-item {
+  animation: slotGlow 0.5s ease-out;
+}
+
+@keyframes slotGlow {
+  0% {
+    color: #FFD700;
+    text-shadow: 0 0 8px rgba(255, 215, 0, 0.9);
+  }
+  100% {
+    color: inherit;
+    text-shadow: none;
+  }
+}
+
+/* Money Animation */
+@keyframes moneyFloat {
+  0% {
+    opacity: 0;
+    transform: translateY(0) scale(0.5) rotate(0deg);
+  }
+  10% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-150px) scale(1.2) rotate(360deg);
+  }
+}
+
+@keyframes moneyPulse {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.1);
+  }
+}
+
+.money-particle {
+  position: absolute;
+  font-size: 24px;
+  pointer-events: none;
+  animation: moneyFloat 2s ease-out forwards;
+  z-index: 1000;
+}
+
+.money-particle-pulse {
+  animation: moneyPulse 0.5s ease-in-out;
+}
