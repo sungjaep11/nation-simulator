@@ -27,7 +27,7 @@ export default function LoginPage() {
 
     // TODO: Add actual authentication logic here
     // For now, redirect to tutorial page
-    router.push("/tutorial");
+    router.push("/selection");
   };
 
   return (
