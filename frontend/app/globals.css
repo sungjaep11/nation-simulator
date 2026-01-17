@@ -202,11 +202,13 @@ body {
 .glass-panel {
   background: linear-gradient(
     135deg,
-    rgba(26, 26, 26, 0.95),
-    rgba(37, 37, 37, 0.9)
+    rgba(13, 13, 13, 0.4),
+    rgba(26, 26, 26, 0.3)
   );
-  backdrop-filter: blur(10px);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
   border: 1px solid rgba(201, 162, 39, 0.2);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
 }
 
 /* Nation-specific styling */

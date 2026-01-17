@@ -176,7 +176,7 @@ function StatItem({
   suffix?: string;
 }) {
   return (
-    <div className="flex items-center gap-2 px-4 py-2 bg-[#1a1a1a] rounded-lg border border-[#C9A227]/20 hover:border-[#C9A227]/50 transition-all duration-300">
+    <div className="flex items-center gap-2 px-4 py-2 glass-panel rounded-lg hover:border-[#C9A227]/50 transition-all duration-300">
       <span className="text-xl">{icon}</span>
       <div className="flex flex-col">
         <span className="text-[10px] text-[#A89F91] uppercase tracking-wider">
@@ -250,7 +250,7 @@ function DiplomacyInfo({ selectedNation }: { selectedNation: NationType }) {
       {relations[selectedNation].map((rel, idx) => (
         <div
           key={idx}
-          className="flex items-center justify-between p-2 bg-[#0d0d0d] rounded-lg"
+          className="flex items-center justify-between p-2 glass-panel rounded-lg"
         >
           <span className="text-sm text-[#F5F5DC]">{rel.nation}</span>
           <div className="flex items-center gap-2">
@@ -307,7 +307,7 @@ function MilitaryInfo({ selectedNation }: { selectedNation: NationType }) {
       {military[selectedNation].map((unit, idx) => (
         <div
           key={idx}
-          className="flex items-center justify-between p-2 bg-[#0d0d0d] rounded-lg"
+          className="flex items-center justify-between p-2 glass-panel rounded-lg"
         >
           <div className="flex items-center gap-2">
             <span>{unit.icon}</span>
@@ -493,9 +493,20 @@ export default function Home() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0d0d0d] korean-pattern flex flex-col">
+    <div 
+      className="min-h-screen flex flex-col"
+      style={{
+        backgroundImage: 'url(/background2.jpg)',
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        backgroundAttachment: 'fixed',
+        backgroundRepeat: 'no-repeat',
+      }}
+    >
+      <div className="absolute inset-0 bg-[#0d0d0d]/60"></div>
+      <div className="relative z-10 flex flex-col min-h-screen">
       {/* ① 상단 헤더 (Status Bar) */}
-      <header className="w-full bg-gradient-to-r from-[#1a1a1a] via-[#252525] to-[#1a1a1a] border-b border-[#C9A227]/30 px-6 py-3">
+      <header className="w-full glass-panel border-b border-[#C9A227]/30 px-6 py-3">
         <div className="max-w-[1800px] mx-auto flex items-center justify-between">
           {/* 국가 정보 */}
           <div className="flex items-center gap-4">
@@ -594,9 +605,9 @@ export default function Home() {
       </main>
 
         {/* ② 우측 패널 (Navigation & Info) */}
-        <aside className="w-[450px] bg-[#1a1a1a] border-l border-[#C9A227]/20 flex flex-col">
+        <aside className="w-[450px] glass-panel border-l border-[#C9A227]/20 flex flex-col">
           {/* 상단: 턴 수 표시 */}
-          <div className="p-4 border-b border-[#C9A227]/20 bg-gradient-to-r from-[#252525] to-[#1a1a1a]">
+          <div className="p-4 border-b border-[#C9A227]/20 glass-panel">
             <div className="text-center">
               <p className="text-xs text-[#A89F91] uppercase tracking-wider mb-1">
                 현재 턴
@@ -609,7 +620,7 @@ export default function Home() {
 
           {/* 중앙: 지도 */}
           <div className="flex-1 p-4 border-b border-[#C9A227]/20">
-            <div className="h-[350px] bg-[#0d0d0d] rounded-xl p-2 border border-[#C9A227]/10 relative">
+            <div className="h-[350px] glass-panel rounded-xl p-2 relative">
               <KoreaMap financeIncrease={financeIncrease} selectedNation={selectedNation} />
             </div>
           </div>
@@ -623,7 +634,7 @@ export default function Home() {
                 className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-all ${
                   activeTab === "diplomacy"
                     ? "bg-[#C9A227] text-[#0d0d0d]"
-                    : "bg-[#252525] text-[#A89F91] hover:bg-[#333]"
+                    : "bg-black/20 backdrop-blur-md text-[#A89F91] hover:bg-black/30 border border-white/5"
                 }`}
               >
                 🤝 외교
@@ -633,7 +644,7 @@ export default function Home() {
                 className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-all ${
                   activeTab === "military"
                     ? "bg-[#C9A227] text-[#0d0d0d]"
-                    : "bg-[#252525] text-[#A89F91] hover:bg-[#333]"
+                    : "bg-black/20 backdrop-blur-md text-[#A89F91] hover:bg-black/30 border border-white/5"
                 }`}
               >
                 ⚔️ 군사
@@ -653,7 +664,7 @@ export default function Home() {
       </div>
 
       {/* ④ 하단 입력창 (Control) */}
-        <footer className="w-full bg-gradient-to-r from-[#1a1a1a] via-[#252525] to-[#1a1a1a] border-t border-[#C9A227]/30 px-6 py-4 animate-fade-in">
+        <footer className="w-full glass-panel border-t border-[#C9A227]/30 px-6 py-4 animate-fade-in">
           <div className="max-w-4xl mx-auto flex gap-4">
             <div className="flex-1 relative">
               <input
@@ -688,6 +699,7 @@ export default function Home() {
             </button>
           </div>
         </footer>
+      </div>
     </div>
   );
 }
