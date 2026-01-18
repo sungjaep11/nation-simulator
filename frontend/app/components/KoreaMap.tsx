@@ -82,14 +82,14 @@ const kingdomColors = {
     stroke: "#8B0000",
   },
   baekje: {
-    default: "#DAA520",
-    hover: "#FFD700",
-    stroke: "#B8860B",
+    default: "#1E90FF",
+    hover: "#4A9EFF",
+    stroke: "#0066CC",
   },
   silla: {
-    default: "#4169E1",
-    hover: "#6495ED",
-    stroke: "#1E3A5F",
+    default: "#FFD700",
+    hover: "#FFE44D",
+    stroke: "#B8860B",
   },
   neutral: {
     default: "#4A4A4A",
@@ -360,14 +360,20 @@ const KoreaMap = memo(function KoreaMap({
       </ComposableMap>
 
       {/* 호버 툴팁 */}
-      {hoveredProvince && (
-        <div className="absolute top-2 left-2 bg-[#1a1a1a] border border-[#C9A227] rounded-lg px-3 py-2 text-sm animate-fade-in z-10">
-          <p className="font-bold text-[#F5F5DC]">{hoveredProvince}</p>
-          <p className="text-[#A89F91] text-xs">
-            영유국: {getOwnerName(getOwner(hoveredProvince))}
-          </p>
-        </div>
-      )}
+      {hoveredProvince && (() => {
+        const owner = getOwner(hoveredProvince);
+        const ownerName = getOwnerName(owner);
+        const ownerColor = owner !== "neutral" ? kingdomColors[owner].default : "#A89F91";
+        
+        return (
+          <div className="absolute top-2 left-2 bg-[#1a1a1a] border border-[#C9A227] rounded-lg px-3 py-2 text-sm animate-fade-in z-10">
+            <p className="font-bold text-[#F5F5DC]">{hoveredProvince}</p>
+            <p className="text-xs">
+              영유국: <span style={{ color: ownerColor }}>{ownerName}</span>
+            </p>
+          </div>
+        );
+      })()}
 
       {/* 범례 */}
       <div className="absolute bottom-2 right-2 bg-[#0d0d0d]/90 border border-[#C9A227]/30 rounded-lg p-3 z-10">

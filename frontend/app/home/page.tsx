@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import KoreaMap from "../components/KoreaMap";
+import Character3D from "../components/Character3D";
 
 // 국가 타입 정의
 type NationType = "goguryeo" | "baekje" | "silla" | null;
@@ -339,6 +340,7 @@ export default function Home() {
   const [commandLogs, setCommandLogs] = useState<CommandLog[]>([]);
   const [financeIncrease, setFinanceIncrease] = useState(0);
   const prevFinanceRef = useRef(stats.finance);
+  const bgmRef = useRef<HTMLAudioElement>(null);
   const [news, setNews] = useState<NewsItem[]>([
     {
       id: 1,
@@ -370,18 +372,21 @@ export default function Home() {
       description:
         "강력한 군사력과 광활한 영토를 자랑하는 북방의 패자. 철기병과 산성 전술로 유명하다.",
       flag: "🏔️",
+      color: "#DC143C",
     },
     baekje: {
       name: "백제",
       description:
         "해상 무역과 문화 예술이 발달한 서남부의 강국. 일본, 중국과의 교류가 활발하다.",
       flag: "🌊",
+      color: "#1E90FF",
     },
     silla: {
       name: "신라",
       description:
         "화랑도의 정신과 단결력으로 무장한 동남부의 신흥 강국. 금관가야를 흡수하며 성장 중이다.",
       flag: "👑",
+      color: "#FFD700",
     },
   };
 
@@ -467,6 +472,15 @@ export default function Home() {
     }
   }, [nationFromUrl]);
 
+  // BGM 자동 재생
+  useEffect(() => {
+    if (mounted && bgmRef.current) {
+      bgmRef.current.play().catch((error) => {
+        console.log("BGM 자동 재생 실패:", error);
+      });
+    }
+  }, [mounted]);
+
   if (!mounted) {
     return (
       <div className="min-h-screen bg-[#0d0d0d] flex items-center justify-center">
@@ -493,18 +507,26 @@ export default function Home() {
   }
 
   return (
-    <div 
-      className="min-h-screen flex flex-col"
-      style={{
-        backgroundImage: 'url(/background2.jpg)',
-        backgroundSize: 'cover',
-        backgroundPosition: 'center',
-        backgroundAttachment: 'fixed',
-        backgroundRepeat: 'no-repeat',
-      }}
-    >
-      <div className="absolute inset-0 bg-[#0d0d0d]/60"></div>
-      <div className="relative z-10 flex flex-col min-h-screen">
+    <>
+      <audio
+        ref={bgmRef}
+        src="/bgm.mp3"
+        loop
+        preload="auto"
+        style={{ display: 'none' }}
+      />
+      <div 
+        className="min-h-screen flex flex-col"
+        style={{
+          backgroundImage: 'url(/background2.jpg)',
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          backgroundAttachment: 'fixed',
+          backgroundRepeat: 'no-repeat',
+        }}
+      >
+        <div className="absolute inset-0 bg-[#0d0d0d]/60"></div>
+        <div className="relative z-10 flex flex-col min-h-screen">
       {/* ① 상단 헤더 (Status Bar) */}
       <header className="w-full glass-panel border-b border-[#C9A227]/30 px-6 py-3">
         <div className="max-w-[1800px] mx-auto flex items-center justify-between">
@@ -514,7 +536,10 @@ export default function Home() {
               {nationInfo[selectedNation].flag}
             </span>
             <div>
-              <h1 className="text-xl font-bold text-[#C9A227] font-serif">
+              <h1 
+                className="text-xl font-bold font-serif"
+                style={{ color: nationInfo[selectedNation].color }}
+              >
                 {nationInfo[selectedNation].name}
               </h1>
               <p className="text-xs text-[#A89F91]">
@@ -537,6 +562,20 @@ export default function Home() {
 
       {/* 메인 컨텐츠 영역 */}
       <div className="flex-1 flex overflow-hidden">
+        {/* 왼쪽: 3D 캐릭터 */}
+        {selectedNation && (
+          <aside className="w-[400px] glass-panel border-r border-[#C9A227]/20 flex flex-col">
+            <div className="flex-1 p-4 overflow-hidden">
+              <Character3D 
+                key={selectedNation}
+                nation={selectedNation} 
+                animationType="normal"
+                shouldPlay={true}
+              />
+            </div>
+          </aside>
+        )}
+        
         {/* ③ 중앙 메인 화면 (Story & News) */}
         <main className="flex-1 p-6 overflow-y-auto">
             {/* 진행 중: 현재 상황, 뉴스, 명령 로그 */}
@@ -701,5 +740,6 @@ export default function Home() {
         </footer>
       </div>
     </div>
+    </>
   );
 }
