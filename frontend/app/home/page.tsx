@@ -724,8 +724,8 @@ export default function Home() {
       <div className="flex-1 flex overflow-hidden">
         {/* 왼쪽: 3D 캐릭터 */}
         {selectedNation && (
-          <aside className="w-[500px] flex flex-col" style={{ borderRight: 'none', background: 'transparent', backdropFilter: 'none' }}>
-            <div className="flex-1 p-4 overflow-hidden">
+          <aside className="w-[350px] flex flex-col" style={{ borderRight: 'none', background: 'transparent', backdropFilter: 'none' }}>
+            <div className="flex-1 p-2 overflow-hidden">
               <Character3D 
                 key={selectedNation}
                 nation={selectedNation} 
@@ -739,7 +739,7 @@ export default function Home() {
         {/* ③ 중앙 메인 화면 (Story & News) */}
         <main className="flex-1 p-6 overflow-y-auto">
             {/* 진행 중: 현재 상황, 뉴스, 명령 로그 */}
-            <div className="max-w-4xl mx-auto space-y-6">
+            <div className="max-w-5xl mx-auto space-y-6">
               {/* 현재 상황 요약 */}
               <section className="glass-panel rounded-xl p-6 animate-fade-in">
                 <h3 className="text-xl font-bold text-[#C9A227] font-serif mb-4 flex items-center gap-2">
@@ -804,7 +804,7 @@ export default function Home() {
       </main>
 
         {/* ② 우측 패널 (Navigation & Info) */}
-        <aside className="w-[450px] glass-panel border-l border-[#C9A227]/20 flex flex-col">
+        <aside className="w-[320px] glass-panel border-l border-[#C9A227]/20 flex flex-col">
           {/* 중앙: 지도 */}
           <div className="flex-[2] p-4 border-b border-[#C9A227]/20 flex flex-col">
             <div className="flex-1 glass-panel rounded-xl p-2 relative min-h-0">

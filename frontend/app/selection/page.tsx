@@ -283,17 +283,37 @@ export default function SelectionPage() {
             style={{ transitionDuration: '2s' }}
           />
           {/* 자막 */}
-          <div className={`absolute bottom-0 left-0 right-0 pb-16 px-8 transition-opacity duration-1000 ${
-            isFadingOut ? 'opacity-0' : 'opacity-100'
-          }`}>
+          <div 
+            className={`absolute bottom-0 left-0 right-0 transition-opacity duration-1000 ${
+              isFadingOut ? 'opacity-0' : 'opacity-100'
+            }`}
+            style={{
+              paddingBottom: 'clamp(2rem, 8vh, 4rem)',
+              paddingLeft: 'clamp(1rem, 4vw, 2rem)',
+              paddingRight: 'clamp(1rem, 4vw, 2rem)',
+            }}
+          >
             <div className="max-w-4xl mx-auto text-center">
               {/* 첫 번째 페어 */}
               {subtitlePair === 0 && (
                 <div className={`transition-opacity duration-500 ${isFirstPairFadingOut ? 'opacity-0' : 'opacity-100'}`}>
-                  <p className="text-white text-2xl md:text-3xl font-bold mb-4 drop-shadow-lg" style={{ textShadow: '2px 2px 8px rgba(0,0,0,0.9)' }}>
+                  <p 
+                    className="text-white font-bold drop-shadow-lg" 
+                    style={{ 
+                      textShadow: '2px 2px 8px rgba(0,0,0,0.9)',
+                      fontSize: 'clamp(1.25rem, 4vw, 1.875rem)',
+                      marginBottom: 'clamp(0.75rem, 2vh, 1rem)',
+                    }}
+                  >
                     <Typewriter text="기원전 57년, 한반도" delay={0} speed={40} />
                   </p>
-                  <p className="text-white text-xl md:text-2xl font-semibold leading-relaxed drop-shadow-lg" style={{ textShadow: '2px 2px 8px rgba(0,0,0,0.9)' }}>
+                  <p 
+                    className="text-white font-semibold leading-relaxed drop-shadow-lg" 
+                    style={{ 
+                      textShadow: '2px 2px 8px rgba(0,0,0,0.9)',
+                      fontSize: 'clamp(1rem, 3vw, 1.5rem)',
+                    }}
+                  >
                     <Typewriter text="중국 한나라의 지배가 무너지고, 수많은 부족이 패권을 다투던 시대." delay={900} speed={30} />
                   </p>
                 </div>
@@ -301,10 +321,23 @@ export default function SelectionPage() {
               {/* 두 번째 페어 */}
               {subtitlePair === 1 && (
                 <div className="transition-opacity duration-500">
-                  <p className="text-white text-xl md:text-2xl font-semibold leading-relaxed drop-shadow-lg" style={{ textShadow: '2px 2px 8px rgba(0,0,0,0.9)' }}>
+                  <p 
+                    className="text-white font-semibold leading-relaxed drop-shadow-lg" 
+                    style={{ 
+                      textShadow: '2px 2px 8px rgba(0,0,0,0.9)',
+                      fontSize: 'clamp(1rem, 3vw, 1.5rem)',
+                    }}
+                  >
                     <Typewriter text="전쟁과 기근, 약탈이 끊이지 않았고... 백성들은 지쳐가고 있었다." delay={0} speed={30} />
                   </p>
-                  <p className="text-white text-xl md:text-2xl font-semibold leading-relaxed drop-shadow-lg mt-3" style={{ textShadow: '2px 2px 8px rgba(0,0,0,0.9)' }}>
+                  <p 
+                    className="text-white font-semibold leading-relaxed drop-shadow-lg" 
+                    style={{ 
+                      textShadow: '2px 2px 8px rgba(0,0,0,0.9)',
+                      fontSize: 'clamp(1rem, 3vw, 1.5rem)',
+                      marginTop: 'clamp(0.5rem, 1.5vh, 0.75rem)',
+                    }}
+                  >
                     <Typewriter text="혼란의 시대, 누군가는 이 땅을 하나로 통일해야 했다." delay={2000} speed={30} />
                   </p>
                 </div>
@@ -343,17 +376,26 @@ export default function SelectionPage() {
         ></div>
 
         {/* 메인 텍스트 컨테이너 */}
-        <div className="text-center px-8 relative z-10 max-w-5xl mx-auto">
+        <div 
+          className="text-center relative z-10 mx-auto"
+          style={{
+            paddingLeft: 'clamp(1rem, 4vw, 2rem)',
+            paddingRight: 'clamp(1rem, 4vw, 2rem)',
+            maxWidth: 'min(90vw, 80rem)',
+          }}
+        >
           {/* 첫 번째 문구 */}
-          <div className="mb-4 md:mb-6">
+          <div style={{ marginBottom: 'clamp(0.75rem, 2vh, 1.5rem)' }}>
             <p 
-              className="text-white text-xl md:text-2xl lg:text-3xl font-serif mb-4 opacity-0 animate-fade-in-scale animate-text-glow"
+              className="text-white font-serif opacity-0 animate-fade-in-scale animate-text-glow"
               style={{ 
                 animationDelay: '0.3s',
                 textShadow: '0 0 20px rgba(255, 255, 255, 0.6), 0 0 40px rgba(255, 255, 255, 0.4), 0 0 60px rgba(255, 255, 255, 0.2)',
                 letterSpacing: '0.1em',
                 lineHeight: '1.4',
-                fontWeight: '600'
+                fontWeight: '600',
+                fontSize: 'clamp(1.125rem, 4vw, 1.875rem)',
+                marginBottom: 'clamp(0.75rem, 2vh, 1rem)',
               }}
             >
               천하가 갈라진 난세,
@@ -362,20 +404,26 @@ export default function SelectionPage() {
 
           {/* 구분선 */}
           <div 
-            className="w-32 md:w-48 h-0.5 mx-auto bg-gradient-to-r from-transparent via-white/60 to-transparent opacity-0 animate-fade-in-scale mb-4 md:mb-6"
-            style={{ animationDelay: '0.3s' }}
+            className="h-0.5 mx-auto bg-gradient-to-r from-transparent via-white/60 to-transparent opacity-0 animate-fade-in-scale"
+            style={{ 
+              animationDelay: '0.3s',
+              width: 'clamp(6rem, 20vw, 12rem)',
+              marginBottom: 'clamp(0.75rem, 2vh, 1.5rem)',
+            }}
           ></div>
 
           {/* 두 번째 문구 */}
-          <div className="mb-4 md:mb-6">
+          <div style={{ marginBottom: 'clamp(0.75rem, 2vh, 1.5rem)' }}>
             <p 
-              className="text-white text-lg md:text-xl lg:text-2xl font-serif mb-4 opacity-0 animate-fade-in-scale animate-text-glow"
+              className="text-white font-serif opacity-0 animate-fade-in-scale animate-text-glow"
               style={{ 
                 animationDelay: '0.3s',
                 textShadow: '0 0 15px rgba(255, 255, 255, 0.6), 0 0 30px rgba(255, 255, 255, 0.4), 0 0 45px rgba(255, 255, 255, 0.2)',
                 letterSpacing: '0.08em',
                 lineHeight: '1.4',
-                fontWeight: '600'
+                fontWeight: '600',
+                fontSize: 'clamp(1rem, 3vw, 1.5rem)',
+                marginBottom: 'clamp(0.75rem, 2vh, 1rem)',
               }}
             >
               검을 들어 영웅이 되어라.
@@ -384,44 +432,53 @@ export default function SelectionPage() {
 
           {/* 구분선 */}
           <div 
-            className="w-24 md:w-40 h-0.5 mx-auto bg-gradient-to-r from-transparent via-white/50 to-transparent opacity-0 animate-fade-in-scale mb-4 md:mb-6"
-            style={{ animationDelay: '0.3s' }}
+            className="h-0.5 mx-auto bg-gradient-to-r from-transparent via-white/50 to-transparent opacity-0 animate-fade-in-scale"
+            style={{ 
+              animationDelay: '0.3s',
+              width: 'clamp(4rem, 15vw, 10rem)',
+              marginBottom: 'clamp(0.75rem, 2vh, 1.5rem)',
+            }}
           ></div>
 
           {/* 세 번째 문구 */}
-          <div className="mb-4 md:mb-6">
+          <div style={{ marginBottom: 'clamp(0.75rem, 2vh, 1.5rem)' }}>
             <p 
-              className="text-white text-base md:text-lg lg:text-xl font-serif opacity-0 animate-fade-in-scale animate-text-glow"
+              className="text-white font-serif opacity-0 animate-fade-in-scale animate-text-glow"
               style={{ 
                 animationDelay: '0.3s',
                 textShadow: '0 0 12px rgba(255, 255, 255, 0.6), 0 0 24px rgba(255, 255, 255, 0.4), 0 0 36px rgba(255, 255, 255, 0.2)',
                 letterSpacing: '0.06em',
                 lineHeight: '1.5',
-                fontWeight: '600'
+                fontWeight: '600',
+                fontSize: 'clamp(0.875rem, 2.5vw, 1.25rem)',
               }}
             >
               그리고 그 검 끝으로
             </p>
             <p 
-              className="text-white text-base md:text-lg lg:text-xl font-serif mt-3 opacity-0 animate-fade-in-scale animate-text-glow"
+              className="text-white font-serif opacity-0 animate-fade-in-scale animate-text-glow"
               style={{ 
                 animationDelay: '0.3s',
                 textShadow: '0 0 12px rgba(255, 255, 255, 0.6), 0 0 24px rgba(255, 255, 255, 0.4), 0 0 36px rgba(255, 255, 255, 0.2)',
                 letterSpacing: '0.06em',
                 lineHeight: '1.5',
-                fontWeight: '600'
+                fontWeight: '600',
+                fontSize: 'clamp(0.875rem, 2.5vw, 1.25rem)',
+                marginTop: 'clamp(0.5rem, 1.5vh, 0.75rem)',
               }}
             >
               삼국을 하나로 묶어
             </p>
             <p 
-              className="text-white text-lg md:text-xl lg:text-2xl font-serif mt-4 opacity-0 animate-fade-in-scale animate-text-glow"
+              className="text-white font-serif opacity-0 animate-fade-in-scale animate-text-glow"
               style={{ 
                 animationDelay: '0.3s',
                 textShadow: '0 0 18px rgba(255, 255, 255, 0.7), 0 0 36px rgba(255, 255, 255, 0.5), 0 0 54px rgba(255, 255, 255, 0.3)',
                 letterSpacing: '0.08em',
                 lineHeight: '1.4',
-                fontWeight: '700'
+                fontWeight: '700',
+                fontSize: 'clamp(1rem, 3vw, 1.5rem)',
+                marginTop: 'clamp(0.75rem, 2vh, 1rem)',
               }}
             >
               천하통일의 대업을 완성하라.
@@ -464,7 +521,7 @@ export default function SelectionPage() {
       <audio ref={bgmRef} src="/bgm.mp3" loop preload="auto" style={{ display: 'none' }} />
 
       <div
-        className={`h-screen flex justify-center pt-16 transition-opacity duration-500 ${
+        className={`h-screen flex justify-center items-center transition-opacity duration-500 ${
           isExiting ? "opacity-0" : "opacity-100"
         }`}
         style={{
@@ -475,19 +532,40 @@ export default function SelectionPage() {
       >
         <div className="absolute inset-0 bg-black/50" />
 
-        <div className="relative z-10 w-full max-w-6xl px-6">
+        <div 
+          className="relative z-10 w-full"
+          style={{
+            maxWidth: 'min(90vw, 1200px)',
+            margin: '0 auto',
+            paddingLeft: 'clamp(1rem, 3vw, 1.5rem)',
+            paddingRight: 'clamp(1rem, 3vw, 1.5rem)',
+            paddingTop: 'clamp(2rem, 5vh, 4rem)',
+            paddingBottom: 'clamp(1rem, 3vh, 2rem)',
+          }}
+        >
           {/* Title */}
-          <div className="text-center mb-8">
-            <h1 className="text-5xl font-bold text-[#C9A227] font-serif">
+          <div className="text-center mb-6 sm:mb-8">
+            <h1 
+              className="font-bold text-[#C9A227] font-serif"
+              style={{
+                fontSize: 'clamp(2rem, 5vw, 3rem)',
+                lineHeight: '1.2',
+              }}
+            >
               국가를 선택하세요
             </h1>
-            <p className="text-[#A89F91] mt-2">
+            <p 
+              className="text-[#A89F91] mt-2"
+              style={{
+                fontSize: 'clamp(0.875rem, 2vw, 1rem)',
+              }}
+            >
               삼국 중 하나를 선택하여 천하통일의 위업을 달성하세요
             </p>
           </div>
 
           {/* Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8 items-start">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 mb-6 sm:mb-8 items-start">
             {nations.map((nation) => {
               const isExpanded = selectedNation === nation.id;
 
@@ -498,15 +576,19 @@ export default function SelectionPage() {
                   className={`relative rounded-2xl text-left transition-all duration-500 backdrop-blur-2xl border self-start overflow-hidden
                     ${
                       isExpanded
-                        ? "p-6 scale-105 shadow-2xl"
-                        : "p-4 scale-100 hover:scale-[1.02] shadow-xl"
+                        ? "shadow-2xl"
+                        : "hover:scale-[1.02] shadow-xl"
                     }`}
                   style={isExpanded ? {
+                    padding: 'clamp(1rem, 2vw, 1.5rem)',
+                    transform: 'scale(1.05)',
                     backgroundColor: 'rgba(26, 26, 26, 0.15)',
                     borderColor: `${nation.color}80`,
                     borderWidth: '2px',
                     boxShadow: `0 8px 32px 0 rgba(0, 0, 0, 0.37), 0 0 20px ${nation.color}40`,
                   } : {
+                    padding: 'clamp(0.75rem, 1.5vw, 1rem)',
+                    transform: 'scale(1)',
                     backgroundColor: 'rgba(26, 26, 26, 0.1)',
                     borderColor: 'rgba(255, 255, 255, 0.18)',
                     borderWidth: '1px',
@@ -524,21 +606,44 @@ export default function SelectionPage() {
                   />
                   {isExpanded && (
                     <div 
-                      className="absolute top-4 right-4 w-6 h-6 rounded-full flex items-center justify-center z-10"
-                      style={{ backgroundColor: nation.color }}
+                      className="absolute top-4 right-4 rounded-full flex items-center justify-center z-10"
+                      style={{ 
+                        backgroundColor: nation.color,
+                        width: 'clamp(1.25rem, 2vw, 1.5rem)',
+                        height: 'clamp(1.25rem, 2vw, 1.5rem)',
+                        fontSize: 'clamp(0.75rem, 1.5vw, 1rem)',
+                      }}
                     >
                       ✓
                     </div>
                   )}
 
                   {/* Header */}
-                  <div className="relative z-10 flex items-center gap-4 mb-2">
-                    <span className="text-5xl">{nation.icon}</span>
+                  <div className="relative z-10 flex items-center gap-3 sm:gap-4 mb-2">
+                    <span 
+                      style={{
+                        fontSize: 'clamp(2rem, 5vw, 3rem)',
+                        lineHeight: '1',
+                      }}
+                    >
+                      {nation.icon}
+                    </span>
                     <div>
-                      <h2 className="text-2xl font-bold text-white">
+                      <h2 
+                        className="font-bold text-white"
+                        style={{
+                          fontSize: 'clamp(1.25rem, 3vw, 1.5rem)',
+                          lineHeight: '1.2',
+                        }}
+                      >
                         {nation.name}
                       </h2>
-                      <p style={{ color: nation.color }}>
+                      <p 
+                        style={{ 
+                          color: nation.color,
+                          fontSize: 'clamp(0.875rem, 2vw, 1rem)',
+                        }}
+                      >
                         {nation.title}
                       </p>
                     </div>
@@ -552,16 +657,23 @@ export default function SelectionPage() {
                         : "max-h-0 opacity-0"
                     }`}
                   >
-                    <p className="text-[#A89F91] text-sm mb-2 leading-relaxed">
+                    <p 
+                      className="text-[#A89F91] mb-2 leading-relaxed"
+                      style={{
+                        fontSize: 'clamp(0.75rem, 1.5vw, 0.875rem)',
+                      }}
+                    >
                       {nation.description}
                     </p>
 
                     <span
-                      className="inline-block text-xs px-3 py-1 rounded-full mb-2"
+                      className="inline-block rounded-full mb-2"
                       style={{
                         color: nation.color,
                         border: `1px solid ${nation.color}60`,
                         background: `${nation.color}20`,
+                        fontSize: 'clamp(0.625rem, 1.2vw, 0.75rem)',
+                        padding: 'clamp(0.25rem, 0.5vw, 0.5rem) clamp(0.5rem, 1vw, 0.75rem)',
                       }}
                     >
                       {nation.feature}
@@ -576,7 +688,10 @@ export default function SelectionPage() {
 
                     {/* Character */}
                     <div 
-                      className="h-[450px] -mx-6 -mt-20 overflow-hidden"
+                      className="-mx-6 -mt-20 overflow-hidden"
+                      style={{
+                        height: 'clamp(300px, 40vh, 450px)',
+                      }}
                       onClick={(e) => e.stopPropagation()}
                       onMouseDown={(e) => e.stopPropagation()}
                       onMouseUp={(e) => e.stopPropagation()}
@@ -593,7 +708,12 @@ export default function SelectionPage() {
                   </div>
 
                   {!isExpanded && (
-                    <p className="relative z-10 text-center text-xs text-[#6B6B6B] mt-3">
+                    <p 
+                      className="relative z-10 text-center text-[#6B6B6B] mt-3"
+                      style={{
+                        fontSize: 'clamp(0.625rem, 1.2vw, 0.75rem)',
+                      }}
+                    >
                       클릭하여 상세 보기
                     </p>
                   )}
@@ -609,10 +729,12 @@ export default function SelectionPage() {
               <div className="text-center">
                 <button
                   onClick={handleConfirm}
-                  className="px-12 py-4 rounded-xl text-lg font-bold transition-all duration-300 shadow-lg hover:shadow-xl hover:brightness-110"
+                  className="rounded-xl font-bold transition-all duration-300 shadow-lg hover:shadow-xl hover:brightness-110"
                   style={{
                     backgroundColor: selectedNationData?.color,
                     color: selectedNationData?.id === 'silla' ? '#0D0D0D' : '#FFFFFF',
+                    padding: 'clamp(0.75rem, 1.5vw, 1rem) clamp(2rem, 5vw, 3rem)',
+                    fontSize: 'clamp(0.875rem, 2vw, 1.125rem)',
                   }}
                 >
                   {selectedNationData?.name}로 시작하기
@@ -637,11 +759,29 @@ function Stat({
   color: string;
 }) {
   return (
-    <div className="bg-black/30 rounded-lg p-2">
-      <p className="font-bold text-sm" style={{ color }}>
+    <div 
+      className="bg-black/30 rounded-lg"
+      style={{
+        padding: 'clamp(0.375rem, 0.75vw, 0.5rem)',
+      }}
+    >
+      <p 
+        className="font-bold" 
+        style={{ 
+          color,
+          fontSize: 'clamp(0.75rem, 1.5vw, 0.875rem)',
+        }}
+      >
         {value.toLocaleString()}
       </p>
-      <p className="text-xs text-[#6B6B6B]">{label}</p>
+      <p 
+        className="text-[#6B6B6B]"
+        style={{
+          fontSize: 'clamp(0.625rem, 1.2vw, 0.75rem)',
+        }}
+      >
+        {label}
+      </p>
     </div>
   );
 }
