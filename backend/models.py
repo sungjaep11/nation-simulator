@@ -8,4 +8,4 @@ class Country(SQLModel, table=True):
     population: int = 50000
     happiness: int = 20
     military: int = 5
-    total_score: int = (gold/10000 +population/10000 + happiness/10 + military/10) 
+    total_score: float = 0.0 
