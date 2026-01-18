@@ -268,6 +268,9 @@ export default function SelectionPage() {
           className="fixed inset-0 z-50 flex items-center justify-center overflow-hidden bg-black cursor-pointer" 
           onClick={handleDystopiaEnd}
         >
+          {/* 상단 검은색 테두리 */}
+          <div className="absolute top-0 left-0 right-0 h-16 bg-black z-20" />
+          
           <video 
             ref={dystopiaVideoRef} 
             src="/selection/dystopia.mp4" 
@@ -282,6 +285,9 @@ export default function SelectionPage() {
             }`}
             style={{ transitionDuration: '2s' }}
           />
+          
+          {/* 하단 검은색 테두리 */}
+          <div className="absolute bottom-0 left-0 right-0 h-16 bg-black z-20" />
           {/* 자막 */}
           <div 
             className={`absolute bottom-0 left-0 right-0 transition-opacity duration-1000 ${
@@ -498,6 +504,9 @@ export default function SelectionPage() {
         }`}
         onClick={() => !isFadingIn && handleIntroEnd()}
       >
+        {/* 상단 검은색 테두리 */}
+        <div className="absolute top-0 left-0 right-0 h-16 bg-black z-20" />
+        
         <video 
           ref={introVideoRef} 
           src="/selection/kings.mp4" 
@@ -511,6 +520,9 @@ export default function SelectionPage() {
           }`}
           style={{ transitionDuration: '2s' }}
         />
+        
+        {/* 하단 검은색 테두리 */}
+        <div className="absolute bottom-0 left-0 right-0 h-16 bg-black z-20" />
       </div>
     );
   }
