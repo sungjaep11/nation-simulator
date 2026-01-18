@@ -487,7 +487,7 @@ export default function SelectionPage() {
           </div>
 
           {/* Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8 items-start">
             {nations.map((nation) => {
               const isExpanded = selectedNation === nation.id;
 
@@ -495,21 +495,44 @@ export default function SelectionPage() {
                 <button
                   key={nation.id}
                   onClick={() => handleSelectNation(nation.id)}
-                  className={`relative rounded-2xl text-left transition-all duration-500 backdrop-blur-xl border-2 shadow-2xl
+                  className={`relative rounded-2xl text-left transition-all duration-500 backdrop-blur-2xl border self-start overflow-hidden
                     ${
                       isExpanded
-                        ? "border-[#C9A227] bg-[#1a1a1a]/80 p-6 scale-105"
-                        : "border-white/10 bg-[#1a1a1a]/50 p-4 scale-95 hover:bg-[#1a1a1a]/70"
+                        ? "p-6 scale-105 shadow-2xl"
+                        : "p-4 scale-100 hover:scale-[1.02] shadow-xl"
                     }`}
+                  style={isExpanded ? {
+                    backgroundColor: 'rgba(26, 26, 26, 0.15)',
+                    borderColor: `${nation.color}80`,
+                    borderWidth: '2px',
+                    boxShadow: `0 8px 32px 0 rgba(0, 0, 0, 0.37), 0 0 20px ${nation.color}40`,
+                  } : {
+                    backgroundColor: 'rgba(26, 26, 26, 0.1)',
+                    borderColor: 'rgba(255, 255, 255, 0.18)',
+                    borderWidth: '1px',
+                    boxShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.37)',
+                  }}
                 >
+                  {/* Glassmorphism overlay */}
+                  <div 
+                    className="absolute inset-0 pointer-events-none"
+                    style={{
+                      background: isExpanded 
+                        ? `linear-gradient(135deg, ${nation.color}15 0%, transparent 100%)`
+                        : 'linear-gradient(135deg, rgba(255, 255, 255, 0.05) 0%, transparent 100%)',
+                    }}
+                  />
                   {isExpanded && (
-                    <div className="absolute top-4 right-4 w-6 h-6 bg-[#C9A227] rounded-full flex items-center justify-center">
+                    <div 
+                      className="absolute top-4 right-4 w-6 h-6 rounded-full flex items-center justify-center z-10"
+                      style={{ backgroundColor: nation.color }}
+                    >
                       ✓
                     </div>
                   )}
 
                   {/* Header */}
-                  <div className="flex items-center gap-4 mb-2">
+                  <div className="relative z-10 flex items-center gap-4 mb-2">
                     <span className="text-5xl">{nation.icon}</span>
                     <div>
                       <h2 className="text-2xl font-bold text-white">
@@ -523,7 +546,7 @@ export default function SelectionPage() {
 
                   {/* Expand */}
                   <div
-                    className={`transition-all overflow-hidden duration-500 ${
+                    className={`relative z-10 transition-all overflow-hidden duration-500 ${
                       isExpanded
                         ? "max-h-[1000px] opacity-100"
                         : "max-h-0 opacity-0"
@@ -570,7 +593,7 @@ export default function SelectionPage() {
                   </div>
 
                   {!isExpanded && (
-                    <p className="text-center text-xs text-[#6B6B6B] mt-3">
+                    <p className="relative z-10 text-center text-xs text-[#6B6B6B] mt-3">
                       클릭하여 상세 보기
                     </p>
                   )}
@@ -580,30 +603,23 @@ export default function SelectionPage() {
           </div>
 
           {/* Confirm */}
-          <div className="text-center">
-            {(() => {
-              const selectedNationData = nations.find(n => n.id === selectedNation);
-              return (
+          {selectedNation && (() => {
+            const selectedNationData = nations.find(n => n.id === selectedNation);
+            return (
+              <div className="text-center">
                 <button
-                  disabled={!selectedNation}
                   onClick={handleConfirm}
-                  className={`px-12 py-4 rounded-xl text-lg font-bold transition-all duration-300 ${
-                    selectedNation
-                      ? 'shadow-lg hover:shadow-xl hover:brightness-110'
-                      : 'bg-[#333] text-[#777] cursor-not-allowed'
-                  }`}
-                  style={selectedNation && selectedNationData ? {
-                    backgroundColor: selectedNationData.color,
-                    color: selectedNationData.id === 'silla' ? '#0D0D0D' : '#FFFFFF',
-                  } : {}}
+                  className="px-12 py-4 rounded-xl text-lg font-bold transition-all duration-300 shadow-lg hover:shadow-xl hover:brightness-110"
+                  style={{
+                    backgroundColor: selectedNationData?.color,
+                    color: selectedNationData?.id === 'silla' ? '#0D0D0D' : '#FFFFFF',
+                  }}
                 >
-                  {selectedNation
-                    ? `${selectedNationData?.name}로 시작하기`
-                    : '국가를 선택해주세요'}
+                  {selectedNationData?.name}로 시작하기
                 </button>
-              );
-            })()}
-          </div>
+              </div>
+            );
+          })()}
         </div>
       </div>
     </>

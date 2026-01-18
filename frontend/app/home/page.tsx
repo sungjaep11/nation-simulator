@@ -411,6 +411,7 @@ export default function Home() {
   
   const [selectedNation, setSelectedNation] = useState<NationType>(nationFromUrl);
   const [turn, setTurn] = useState(1);
+  const [username, setUsername] = useState<string>("");
   const [stats, setStats] = useState<GameStats>({
     finance: 10000,
     population: 500000,
@@ -567,6 +568,11 @@ export default function Home() {
 
   useEffect(() => {
     setMounted(true);
+    // localStorage에서 사용자명 가져오기
+    const storedUsername = localStorage.getItem("username");
+    if (storedUsername) {
+      setUsername(storedUsername);
+    }
   }, []);
 
   // URL에서 국가가 전달되면 자동으로 설정
@@ -652,7 +658,7 @@ export default function Home() {
                 {nationInfo[selectedNation].name}
               </h1>
               <p className="text-xs text-[#A89F91]">
-                제 {turn}대 군주
+                {username || `제 ${turn}대 군주`}
               </p>
             </div>
           </div>

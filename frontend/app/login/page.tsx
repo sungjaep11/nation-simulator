@@ -33,6 +33,9 @@ export default function LoginPage() {
       return;
     }
 
+    // 사용자명을 localStorage에 저장
+    localStorage.setItem("username", username);
+    
     // TODO: Add actual authentication logic here
     // For now, redirect to tutorial page
     router.push("/selection");
