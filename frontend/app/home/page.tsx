@@ -564,7 +564,7 @@ export default function Home() {
       <div className="flex-1 flex overflow-hidden">
         {/* 왼쪽: 3D 캐릭터 */}
         {selectedNation && (
-          <aside className="w-[400px] glass-panel border-r border-[#C9A227]/20 flex flex-col">
+          <aside className="w-[500px] flex flex-col" style={{ borderRight: 'none', background: 'transparent', backdropFilter: 'none' }}>
             <div className="flex-1 p-4 overflow-hidden">
               <Character3D 
                 key={selectedNation}
