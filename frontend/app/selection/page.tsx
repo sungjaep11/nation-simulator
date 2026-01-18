@@ -111,10 +111,14 @@ export default function SelectionPage() {
   const [isFadingOut, setIsFadingOut] = useState(false);
   const [isFadingIn, setIsFadingIn] = useState(true);
   const [isKingsEnding, setIsKingsEnding] = useState(false);
+  const [isTransitionFadingOut, setIsTransitionFadingOut] = useState(false);
+  const [subtitlePair, setSubtitlePair] = useState<0 | 1 | null>(null);
+  const [isFirstPairFadingOut, setIsFirstPairFadingOut] = useState(false);
   const dystopiaVideoRef = useRef<HTMLVideoElement>(null);
   const introVideoRef = useRef<HTMLVideoElement>(null);
   const bgmRef = useRef<HTMLAudioElement>(null);
   const transitionTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const subtitleTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // 비디오 자동 재생
   useEffect(() => {
@@ -125,17 +129,67 @@ export default function SelectionPage() {
     }
   }, [videoPhase]);
 
-  // 트랜지션 처리: 4초 대기 후 kings 영상으로
+  // 자막 페어 타이밍 제어
+  useEffect(() => {
+    if (videoPhase !== 'dystopia') {
+      setSubtitlePair(null);
+      setIsFirstPairFadingOut(false);
+      return;
+    }
+
+    // 첫 번째 페어 표시 (0.3초 후)
+    const showFirstPair = setTimeout(() => {
+      setSubtitlePair(0);
+      setIsFirstPairFadingOut(false);
+    }, 300);
+
+    // 첫 번째 페어 페이드 아웃 시작 (약 2.5초 후 - 첫 줄이 끝나고 약간의 시간 후)
+    const startFadeOut = setTimeout(() => {
+      setIsFirstPairFadingOut(true);
+    }, 2800);
+
+    // 첫 번째 페어 완전히 숨김 (페이드 아웃 후)
+    const hideFirstPair = setTimeout(() => {
+      setSubtitlePair(null);
+      setIsFirstPairFadingOut(false);
+    }, 3300);
+
+    // 두 번째 페어 표시 (약 3.5초 후)
+    const showSecondPair = setTimeout(() => {
+      setSubtitlePair(1);
+    }, 3500);
+
+    // 두 번째 페어는 비디오가 끝날 때까지 유지 (또는 일정 시간 후 숨김)
+    // handleDystopiaEnd에서 처리됨
+
+    return () => {
+      clearTimeout(showFirstPair);
+      clearTimeout(startFadeOut);
+      clearTimeout(hideFirstPair);
+      clearTimeout(showSecondPair);
+    };
+  }, [videoPhase]);
+
+  // 트랜지션 처리: 4초 대기 후 kings 영상으로 (3.5초에 페이드 아웃 시작)
   useEffect(() => {
     if (videoPhase === 'transition') {
+      setIsTransitionFadingOut(false);
+      // 3.5초 후 페이드 아웃 시작
+      const fadeOutTimer = setTimeout(() => {
+        setIsTransitionFadingOut(true);
+      }, 3500);
+      
+      // 4초 후 intro로 전환
       transitionTimerRef.current = setTimeout(() => {
         setIsFadingIn(true);
         setVideoPhase('intro');
       }, 4000);
+      
       return () => {
         if (transitionTimerRef.current) {
           clearTimeout(transitionTimerRef.current);
         }
+        clearTimeout(fadeOutTimer);
       };
     }
   }, [videoPhase]);
@@ -145,8 +199,11 @@ export default function SelectionPage() {
       clearTimeout(transitionTimerRef.current);
       transitionTimerRef.current = null;
     }
-    setIsFadingIn(true);
-    setVideoPhase('intro');
+    setIsTransitionFadingOut(true);
+    setTimeout(() => {
+      setIsFadingIn(true);
+      setVideoPhase('intro');
+    }, 500);
   };
 
   // kings 영상: fade in 완료 후 재생 시작
@@ -230,18 +287,28 @@ export default function SelectionPage() {
             isFadingOut ? 'opacity-0' : 'opacity-100'
           }`}>
             <div className="max-w-4xl mx-auto text-center">
-              <p className="text-white text-lg md:text-xl font-medium mb-3 drop-shadow-lg" style={{ textShadow: '2px 2px 8px rgba(0,0,0,0.9)' }}>
-                <Typewriter text="기원전 57년, 한반도" delay={300} speed={40} />
-              </p>
-              <p className="text-white/90 text-base md:text-lg leading-relaxed drop-shadow-lg" style={{ textShadow: '2px 2px 8px rgba(0,0,0,0.9)' }}>
-                <Typewriter text="중국 한나라의 지배가 무너지고, 수많은 부족이 패권을 다투던 시대." delay={1200} speed={30} />
-              </p>
-              <p className="text-white/90 text-base md:text-lg leading-relaxed drop-shadow-lg mt-2" style={{ textShadow: '2px 2px 8px rgba(0,0,0,0.9)' }}>
-                <Typewriter text="전쟁과 기근, 약탈이 끊이지 않았고... 백성들은 지쳐가고 있었다." delay={3500} speed={30} />
-              </p>
-              <p className="text-white/90 text-base md:text-lg leading-relaxed drop-shadow-lg mt-2" style={{ textShadow: '2px 2px 8px rgba(0,0,0,0.9)' }}>
-                <Typewriter text="혼란의 시대, 누군가는 이 땅을 하나로 통일해야 했다." delay={5500} speed={30} />
-              </p>
+              {/* 첫 번째 페어 */}
+              {subtitlePair === 0 && (
+                <div className={`transition-opacity duration-500 ${isFirstPairFadingOut ? 'opacity-0' : 'opacity-100'}`}>
+                  <p className="text-white text-2xl md:text-3xl font-bold mb-4 drop-shadow-lg" style={{ textShadow: '2px 2px 8px rgba(0,0,0,0.9)' }}>
+                    <Typewriter text="기원전 57년, 한반도" delay={0} speed={40} />
+                  </p>
+                  <p className="text-white text-xl md:text-2xl font-semibold leading-relaxed drop-shadow-lg" style={{ textShadow: '2px 2px 8px rgba(0,0,0,0.9)' }}>
+                    <Typewriter text="중국 한나라의 지배가 무너지고, 수많은 부족이 패권을 다투던 시대." delay={900} speed={30} />
+                  </p>
+                </div>
+              )}
+              {/* 두 번째 페어 */}
+              {subtitlePair === 1 && (
+                <div className="transition-opacity duration-500">
+                  <p className="text-white text-xl md:text-2xl font-semibold leading-relaxed drop-shadow-lg" style={{ textShadow: '2px 2px 8px rgba(0,0,0,0.9)' }}>
+                    <Typewriter text="전쟁과 기근, 약탈이 끊이지 않았고... 백성들은 지쳐가고 있었다." delay={0} speed={30} />
+                  </p>
+                  <p className="text-white text-xl md:text-2xl font-semibold leading-relaxed drop-shadow-lg mt-3" style={{ textShadow: '2px 2px 8px rgba(0,0,0,0.9)' }}>
+                    <Typewriter text="혼란의 시대, 누군가는 이 땅을 하나로 통일해야 했다." delay={2000} speed={30} />
+                  </p>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -253,27 +320,113 @@ export default function SelectionPage() {
   if (videoPhase === 'transition') {
     return (
       <div 
-        className="fixed inset-0 z-50 h-screen w-screen bg-black flex items-center justify-center cursor-pointer"
+        className={`fixed inset-0 z-50 h-screen w-screen bg-black flex items-center justify-center cursor-pointer overflow-hidden transition-opacity duration-1500 ${
+          isTransitionFadingOut ? 'opacity-0' : 'opacity-100'
+        }`}
         onClick={handleTransitionSkip}
       >
-        <div className="text-center px-8">
-          <p className="text-[#C9A227] text-xl md:text-2xl font-serif mb-6 animate-fade-in" style={{ animationDelay: '0.5s' }}>
-            그리고, 세 명의 영웅이 나타났다.
-          </p>
-          <div className="space-y-4">
-            <p className="text-white text-lg md:text-xl animate-fade-in" style={{ animationDelay: '1.2s' }}>
-              <span className="text-[#C41E3A] font-bold">고구려</span>의 <span className="text-[#C41E3A]">주몽</span>
-            </p>
-            <p className="text-white text-lg md:text-xl animate-fade-in" style={{ animationDelay: '1.6s' }}>
-              <span className="text-[#1E90FF] font-bold">백제</span>의 <span className="text-[#1E90FF]">온조</span>
-            </p>
-            <p className="text-white text-lg md:text-xl animate-fade-in" style={{ animationDelay: '2s' }}>
-              <span className="text-[#FFD700] font-bold">신라</span>의 <span className="text-[#FFD700]">박혁거세</span>
+        {/* 배경 파티클 효과 */}
+        <div className="absolute inset-0 opacity-30">
+          <div className="absolute top-1/4 left-1/4 w-3 h-3 bg-[#C9A227] rounded-full animate-pulse blur-sm" style={{ animationDelay: '0s' }}></div>
+          <div className="absolute top-1/3 right-1/4 w-2 h-2 bg-[#C41E3A] rounded-full animate-pulse blur-sm" style={{ animationDelay: '0.5s' }}></div>
+          <div className="absolute bottom-1/3 left-1/3 w-3 h-3 bg-[#1E90FF] rounded-full animate-pulse blur-sm" style={{ animationDelay: '1s' }}></div>
+          <div className="absolute bottom-1/4 right-1/3 w-2 h-2 bg-[#FFD700] rounded-full animate-pulse blur-sm" style={{ animationDelay: '1.5s' }}></div>
+          <div className="absolute top-1/2 left-1/2 w-1 h-1 bg-[#C9A227] rounded-full animate-pulse blur-sm" style={{ animationDelay: '2s' }}></div>
+        </div>
+
+        {/* 배경 그라데이션 효과 */}
+        <div 
+          className="absolute inset-0 opacity-10"
+          style={{
+            background: 'radial-gradient(circle at center, rgba(201, 162, 39, 0.2) 0%, transparent 70%)'
+          }}
+        ></div>
+
+        {/* 메인 텍스트 컨테이너 */}
+        <div className="text-center px-8 relative z-10 max-w-5xl mx-auto">
+          {/* 첫 번째 문구 */}
+          <div className="mb-4 md:mb-6">
+            <p 
+              className="text-white text-xl md:text-2xl lg:text-3xl font-serif mb-4 opacity-0 animate-fade-in-scale animate-text-glow"
+              style={{ 
+                animationDelay: '0.3s',
+                textShadow: '0 0 20px rgba(255, 255, 255, 0.6), 0 0 40px rgba(255, 255, 255, 0.4), 0 0 60px rgba(255, 255, 255, 0.2)',
+                letterSpacing: '0.1em',
+                lineHeight: '1.4',
+                fontWeight: '600'
+              }}
+            >
+              천하가 갈라진 난세,
             </p>
           </div>
-          <p className="text-white/80 text-base md:text-lg mt-8 animate-fade-in" style={{ animationDelay: '2.5s' }}>
-            삼국통일을 향한 대서사시가 시작된다.
-          </p>
+
+          {/* 구분선 */}
+          <div 
+            className="w-32 md:w-48 h-0.5 mx-auto bg-gradient-to-r from-transparent via-white/60 to-transparent opacity-0 animate-fade-in-scale mb-4 md:mb-6"
+            style={{ animationDelay: '0.3s' }}
+          ></div>
+
+          {/* 두 번째 문구 */}
+          <div className="mb-4 md:mb-6">
+            <p 
+              className="text-white text-lg md:text-xl lg:text-2xl font-serif mb-4 opacity-0 animate-fade-in-scale animate-text-glow"
+              style={{ 
+                animationDelay: '0.3s',
+                textShadow: '0 0 15px rgba(255, 255, 255, 0.6), 0 0 30px rgba(255, 255, 255, 0.4), 0 0 45px rgba(255, 255, 255, 0.2)',
+                letterSpacing: '0.08em',
+                lineHeight: '1.4',
+                fontWeight: '600'
+              }}
+            >
+              검을 들어 영웅이 되어라.
+            </p>
+          </div>
+
+          {/* 구분선 */}
+          <div 
+            className="w-24 md:w-40 h-0.5 mx-auto bg-gradient-to-r from-transparent via-white/50 to-transparent opacity-0 animate-fade-in-scale mb-4 md:mb-6"
+            style={{ animationDelay: '0.3s' }}
+          ></div>
+
+          {/* 세 번째 문구 */}
+          <div className="mb-4 md:mb-6">
+            <p 
+              className="text-white text-base md:text-lg lg:text-xl font-serif opacity-0 animate-fade-in-scale animate-text-glow"
+              style={{ 
+                animationDelay: '0.3s',
+                textShadow: '0 0 12px rgba(255, 255, 255, 0.6), 0 0 24px rgba(255, 255, 255, 0.4), 0 0 36px rgba(255, 255, 255, 0.2)',
+                letterSpacing: '0.06em',
+                lineHeight: '1.5',
+                fontWeight: '600'
+              }}
+            >
+              그리고 그 검 끝으로
+            </p>
+            <p 
+              className="text-white text-base md:text-lg lg:text-xl font-serif mt-3 opacity-0 animate-fade-in-scale animate-text-glow"
+              style={{ 
+                animationDelay: '0.3s',
+                textShadow: '0 0 12px rgba(255, 255, 255, 0.6), 0 0 24px rgba(255, 255, 255, 0.4), 0 0 36px rgba(255, 255, 255, 0.2)',
+                letterSpacing: '0.06em',
+                lineHeight: '1.5',
+                fontWeight: '600'
+              }}
+            >
+              삼국을 하나로 묶어
+            </p>
+            <p 
+              className="text-white text-lg md:text-xl lg:text-2xl font-serif mt-4 opacity-0 animate-fade-in-scale animate-text-glow"
+              style={{ 
+                animationDelay: '0.3s',
+                textShadow: '0 0 18px rgba(255, 255, 255, 0.7), 0 0 36px rgba(255, 255, 255, 0.5), 0 0 54px rgba(255, 255, 255, 0.3)',
+                letterSpacing: '0.08em',
+                lineHeight: '1.4',
+                fontWeight: '700'
+              }}
+            >
+              천하통일의 대업을 완성하라.
+            </p>
+          </div>
         </div>
       </div>
     );

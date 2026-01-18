@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useSearchParams } from "next/navigation";
+import Image from "next/image";
 import KoreaMap from "../components/KoreaMap";
 import Character3D from "../components/Character3D";
 
@@ -13,6 +14,12 @@ interface GameStats {
   population: number;
   happiness: number;
   military: number;
+}
+
+interface NationStats {
+  goguryeo: GameStats;
+  baekje: GameStats;
+  silla: GameStats;
 }
 
 interface NewsItem {
@@ -42,10 +49,9 @@ function SlotDigit({
   const [targetDigit, setTargetDigit] = useState(digit);
   const [spinning, setSpinning] = useState(false);
   const prevDigit = useRef(digit);
-  const isFirstMount = useRef(true);
 
   useEffect(() => {
-    const shouldAnimate = animate || (prevDigit.current !== digit) || isFirstMount.current;
+    const shouldAnimate = animate || (prevDigit.current !== digit);
     
     if (shouldAnimate && /\d/.test(digit)) {
       // 애니메이션 시작 전에 targetDigit 설정
@@ -59,7 +65,6 @@ function SlotDigit({
       const endTimeout = setTimeout(() => {
         setSpinning(false);
         prevDigit.current = digit;
-        isFirstMount.current = false;
       }, delay + 800);
 
       return () => {
@@ -169,15 +174,61 @@ function StatItem({
   value,
   prefix = "",
   suffix = "",
+  allNationStats,
+  statType,
+  selectedNation,
+  turn,
 }: {
   icon: string;
   label: string;
   value: number;
   prefix?: string;
   suffix?: string;
+  allNationStats?: NationStats;
+  statType?: "finance" | "population" | "happiness" | "military" | "totalScore" | "turn";
+  selectedNation?: NationType;
+  turn?: number;
 }) {
+  const [showTooltip, setShowTooltip] = useState(false);
+
+  const getRankingData = () => {
+    if (!allNationStats || !statType || statType === "turn") return null;
+
+    const nationData = [
+      { nation: "고구려", value: statType === "totalScore" 
+        ? Math.floor(allNationStats.goguryeo.finance / 100) +
+          Math.floor(allNationStats.goguryeo.population / 1000) +
+          allNationStats.goguryeo.happiness * 10 +
+          Math.floor(allNationStats.goguryeo.military / 10)
+        : allNationStats.goguryeo[statType],
+        type: "goguryeo" as const },
+      { nation: "백제", value: statType === "totalScore"
+        ? Math.floor(allNationStats.baekje.finance / 100) +
+          Math.floor(allNationStats.baekje.population / 1000) +
+          allNationStats.baekje.happiness * 10 +
+          Math.floor(allNationStats.baekje.military / 10)
+        : allNationStats.baekje[statType],
+        type: "baekje" as const },
+      { nation: "신라", value: statType === "totalScore"
+        ? Math.floor(allNationStats.silla.finance / 100) +
+          Math.floor(allNationStats.silla.population / 1000) +
+          allNationStats.silla.happiness * 10 +
+          Math.floor(allNationStats.silla.military / 10)
+        : allNationStats.silla[statType],
+        type: "silla" as const },
+    ];
+
+    return nationData.sort((a, b) => b.value - a.value);
+  };
+
+  const ranking = getRankingData();
+
   return (
-    <div className="flex items-center gap-2 px-4 py-2 glass-panel rounded-lg hover:border-[#C9A227]/50 transition-all duration-300">
+    <div 
+      className="relative flex items-center gap-2 px-4 py-2 glass-panel rounded-lg hover:border-[#C9A227]/50 transition-all duration-300"
+      onMouseEnter={() => setShowTooltip(true)}
+      onMouseLeave={() => setShowTooltip(false)}
+    >
       <span className="text-xl">{icon}</span>
       <div className="flex flex-col">
         <span className="text-[10px] text-[#A89F91] uppercase tracking-wider">
@@ -187,6 +238,37 @@ function StatItem({
           <RollingNumber value={value} prefix={prefix} suffix={suffix} />
         </span>
       </div>
+      
+      {showTooltip && ranking && (
+        <div className="absolute top-full left-0 mt-2 bg-[#1a1a1a] border border-[#C9A227] rounded-lg px-3 py-2 z-[9999] min-w-[200px] shadow-lg">
+          <p className="text-xs text-[#A89F91] mb-2 font-bold">{label} 랭킹</p>
+          <div className="space-y-1.5">
+            {ranking.map((item, index) => {
+              const isSelected = item.type === selectedNation;
+              return (
+                <div 
+                  key={item.type}
+                  className={`flex items-center justify-between text-xs ${
+                    isSelected ? "text-[#C9A227]" : "text-[#F5F5DC]"
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-[#A89F91] font-bold w-4">
+                      {index === 0 ? "🥇" : index === 1 ? "🥈" : "🥉"}
+                    </span>
+                    <span className={isSelected ? "font-bold" : ""}>{item.nation}</span>
+                  </div>
+                  <span className="font-mono">
+                    {prefix}
+                    {typeof item.value === "number" ? item.value.toLocaleString() : item.value}
+                    {suffix}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -335,6 +417,28 @@ export default function Home() {
     happiness: 70,
     military: 25000,
   });
+
+  // 각 나라별 기본 stats (현재는 선택된 나라만 업데이트되고, 나머지는 기본값 사용)
+  const allNationStats: NationStats = {
+    goguryeo: selectedNation === "goguryeo" ? stats : {
+      finance: 12000,
+      population: 600000,
+      happiness: 65,
+      military: 30000,
+    },
+    baekje: selectedNation === "baekje" ? stats : {
+      finance: 11000,
+      population: 550000,
+      happiness: 75,
+      military: 20000,
+    },
+    silla: selectedNation === "silla" ? stats : {
+      finance: 9000,
+      population: 450000,
+      happiness: 80,
+      military: 28000,
+    },
+  };
   const [commandInput, setCommandInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [commandLogs, setCommandLogs] = useState<CommandLog[]>([]);
@@ -526,15 +630,20 @@ export default function Home() {
         }}
       >
         <div className="absolute inset-0 bg-[#0d0d0d]/60"></div>
-        <div className="relative z-10 flex flex-col min-h-screen">
+        <div className="relative z-10 flex flex-col h-screen">
       {/* ① 상단 헤더 (Status Bar) */}
-      <header className="w-full glass-panel border-b border-[#C9A227]/30 px-6 py-3">
-        <div className="max-w-[1800px] mx-auto flex items-center justify-between">
+      <header className="w-full glass-panel border-b border-[#C9A227]/30 px-6 py-3 flex-shrink-0">
+        <div className="max-w-[1850px] mx-auto flex items-center justify-between">
           {/* 국가 정보 */}
           <div className="flex items-center gap-4">
-            <span className="text-4xl">
-              {nationInfo[selectedNation].flag}
-            </span>
+            <div className="relative w-12 h-12">
+              <Image
+                src="/logo.png"
+                alt="Logo"
+                fill
+                className="object-contain"
+              />
+            </div>
             <div>
               <h1 
                 className="text-xl font-bold font-serif"
@@ -550,12 +659,57 @@ export default function Home() {
 
           {/* 수치 데이터 */}
           <div className="flex items-center gap-3 animate-fade-in">
-            <StatItem icon="💰" label="재정" value={stats.finance} prefix="$" />
-            <StatItem icon="👥" label="인구" value={stats.population} />
-            <StatItem icon="😊" label="행복도" value={stats.happiness} suffix="%" />
-            <StatItem icon="⚔️" label="군사력" value={stats.military} />
-            <div className="h-10 w-px bg-[#C9A227]/30 mx-2" />
-            <StatItem icon="🏆" label="총합 점수" value={totalScore} />
+            <StatItem 
+              icon="💰" 
+              label="재정" 
+              value={stats.finance} 
+              prefix="$" 
+              allNationStats={allNationStats}
+              statType="finance"
+              selectedNation={selectedNation}
+            />
+            <StatItem 
+              icon="👥" 
+              label="인구" 
+              value={stats.population}
+              allNationStats={allNationStats}
+              statType="population"
+              selectedNation={selectedNation}
+            />
+            <StatItem 
+              icon="😊" 
+              label="행복도" 
+              value={stats.happiness} 
+              suffix="%"
+              allNationStats={allNationStats}
+              statType="happiness"
+              selectedNation={selectedNation}
+            />
+            <StatItem 
+              icon="⚔️" 
+              label="군사력" 
+              value={stats.military}
+              allNationStats={allNationStats}
+              statType="military"
+              selectedNation={selectedNation}
+            />
+            <StatItem 
+              icon="🏆" 
+              label="총합 점수" 
+              value={totalScore}
+              allNationStats={allNationStats}
+              statType="totalScore"
+              selectedNation={selectedNation}
+            />
+            <StatItem 
+              icon="📜" 
+              label="현재 턴" 
+              value={turn}
+              allNationStats={allNationStats}
+              statType="turn"
+              selectedNation={selectedNation}
+              turn={turn}
+            />
           </div>
         </div>
       </header>
@@ -645,27 +799,21 @@ export default function Home() {
 
         {/* ② 우측 패널 (Navigation & Info) */}
         <aside className="w-[450px] glass-panel border-l border-[#C9A227]/20 flex flex-col">
-          {/* 상단: 턴 수 표시 */}
-          <div className="p-4 border-b border-[#C9A227]/20 glass-panel">
-            <div className="text-center">
-              <p className="text-xs text-[#A89F91] uppercase tracking-wider mb-1">
-                현재 턴
-              </p>
-              <p className="text-3xl font-bold text-[#C9A227] font-serif">
-                <RollingNumber value={turn} />
-              </p>
-            </div>
-          </div>
-
           {/* 중앙: 지도 */}
-          <div className="flex-1 p-4 border-b border-[#C9A227]/20">
-            <div className="h-[350px] glass-panel rounded-xl p-2 relative">
-              <KoreaMap financeIncrease={financeIncrease} selectedNation={selectedNation} />
+          <div className="flex-[2] p-4 border-b border-[#C9A227]/20 flex flex-col">
+            <div className="flex-1 glass-panel rounded-xl p-2 relative min-h-0">
+              <KoreaMap 
+                financeIncrease={financeIncrease} 
+                selectedNation={selectedNation}
+                nationScores={{
+                  [selectedNation || "goguryeo"]: totalScore,
+                }}
+              />
             </div>
           </div>
 
           {/* 하단: 외교/군사 탭 */}
-          <div className="p-4">
+          <div className="flex-[1] p-4 flex flex-col min-h-0">
             {/* 탭 버튼 */}
             <div className="flex gap-2 mb-4">
               <button
@@ -691,7 +839,7 @@ export default function Home() {
             </div>
 
             {/* 탭 컨텐츠 */}
-            <div className="min-h-[150px]">
+            <div className="flex-1 overflow-y-auto">
               {activeTab === "diplomacy" ? (
                 <DiplomacyInfo selectedNation={selectedNation} />
               ) : (
@@ -703,7 +851,7 @@ export default function Home() {
       </div>
 
       {/* ④ 하단 입력창 (Control) */}
-        <footer className="w-full glass-panel border-t border-[#C9A227]/30 px-6 py-4 animate-fade-in">
+        <footer className="w-full glass-panel border-t border-[#C9A227]/30 px-6 py-4 animate-fade-in flex-shrink-0">
           <div className="max-w-4xl mx-auto flex gap-4">
             <div className="flex-1 relative">
               <input

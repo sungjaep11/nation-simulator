@@ -15,8 +15,13 @@ const nanumGothic = Nanum_Gothic({
 });
 
 export const metadata: Metadata = {
-  title: "삼국지 - 천하통일",
+  title: "삼한일류(三韓一流): 군주의 시간",
   description: "고구려, 백제, 신라의 군주가 되어 천하 통일을 이루어라",
+  icons: {
+    icon: "/logo.png",
+    shortcut: "/logo.png",
+    apple: "/logo.png",
+  },
 };
 
 export default function RootLayout({

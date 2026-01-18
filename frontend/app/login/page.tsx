@@ -2,9 +2,11 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 
 export default function LoginPage() {
   const router = useRouter();
+  const [email, setEmail] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -18,9 +20,15 @@ export default function LoginPage() {
     // Simulate API call
     await new Promise((resolve) => setTimeout(resolve, 1000));
 
-    // For now, just validate that fields are filled
-    if (!username.trim() || !password.trim()) {
-      setError("사용자명과 비밀번호를 입력해주세요.");
+    // 이메일 형식 검사
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!email.trim() || !username.trim() || !password.trim()) {
+      setError("이메일, 사용자명, 비밀번호를 모두 입력해주세요.");
+      setIsLoading(false);
+      return;
+    }
+    if (!emailRegex.test(email)) {
+      setError("올바른 이메일 형식을 입력해주세요. (예: example@email.com)");
       setIsLoading(false);
       return;
     }
@@ -34,18 +42,31 @@ export default function LoginPage() {
     <div 
       className="min-h-screen w-full flex items-center justify-center"
       style={{
-        backgroundImage: 'url(/selection/temple.png)',
+        backgroundImage: 'url(/login/temple.png)',
         backgroundSize: 'cover',
         backgroundPosition: 'center',
         backgroundRepeat: 'no-repeat',
       }}
     >
       <div className="absolute inset-0 bg-[#0D0D0D]/60"></div>
-      <div className="relative z-10 w-full max-w-md px-6">
+      <div className="relative z-10 w-full max-w-lg px-6">
         <div className="glass-panel rounded-lg p-8 animate-fade-in-up">
           {/* Header */}
           <div className="text-center mb-8">
-            <h1 className="text-3xl font-bold text-[#F5F5DC] mb-2">삼국시대 시뮬레이터</h1>
+            <div className="flex justify-center mb-4">
+              <div className="relative w-35 h-35">
+                <Image
+                  src="/logo.png"
+                  alt="Logo"
+                  fill
+                  className="object-contain"
+                />
+              </div>
+            </div>
+            <h1 className="text-3xl font-bold text-[#F5F5DC] mb-2 whitespace-nowrap">
+              <span>삼한일류(三韓一流):</span>
+              <span className="text-2xl"> 군주의 시간</span>
+            </h1>
             <p className="text-[#A89F91] text-sm">로그인하여 게임을 시작하세요</p>
           </div>
 
@@ -57,7 +78,25 @@ export default function LoginPage() {
           )}
 
           {/* Login Form */}
-          <form onSubmit={handleSubmit} className="space-y-6">
+          <form onSubmit={handleSubmit} className="space-y-6" noValidate>
+            <div>
+              <label
+                htmlFor="email"
+                className="block text-sm font-medium text-[#F5F5DC] mb-2"
+              >
+                이메일
+              </label>
+              <input
+                id="email"
+                type="text"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full px-4 py-3 bg-[#0D0D0D] border border-[#C9A227]/30 rounded-lg text-[#F5F5DC] placeholder-[#6B6B6B] focus:outline-none focus:border-[#C9A227] focus:ring-2 focus:ring-[#C9A227]/20 transition-all"
+                placeholder="이메일을 입력하세요"
+                disabled={isLoading}
+              />
+            </div>
+
             <div>
               <label
                 htmlFor="username"
@@ -117,15 +156,6 @@ export default function LoginPage() {
                 회원가입
               </button>
             </p>
-          </div>
-        </div>
-
-        {/* Decorative elements */}
-        <div className="mt-8 text-center">
-          <div className="flex justify-center gap-4 text-2xl opacity-30">
-            <span>🏔️</span>
-            <span>🌊</span>
-            <span>👑</span>
           </div>
         </div>
       </div>

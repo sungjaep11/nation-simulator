@@ -109,6 +109,11 @@ interface KoreaMapProps {
   onTerritoryClick?: (territory: Territory) => void;
   financeIncrease?: number;
   selectedNation?: "goguryeo" | "baekje" | "silla" | null;
+  nationScores?: {
+    goguryeo?: number;
+    baekje?: number;
+    silla?: number;
+  };
 }
 
 // 로컬 지도 파일 경로
@@ -129,6 +134,7 @@ const KoreaMap = memo(function KoreaMap({
   onTerritoryClick,
   financeIncrease = 0,
   selectedNation = null,
+  nationScores,
 }: KoreaMapProps) {
   const [hoveredProvince, setHoveredProvince] = useState<string | null>(null);
   const [topoData, setTopoData] = useState<Topology | null>(null);
@@ -245,8 +251,8 @@ const KoreaMap = memo(function KoreaMap({
       <ComposableMap
         projection="geoMercator"
         projectionConfig={{
-          scale: 3200,
-          center: [127.5, 38.0],
+          scale: 4000,
+          center: [127.5, 38.6],
         }}
         style={{
           width: "100%",
@@ -364,6 +370,7 @@ const KoreaMap = memo(function KoreaMap({
         const owner = getOwner(hoveredProvince);
         const ownerName = getOwnerName(owner);
         const ownerColor = owner !== "neutral" ? kingdomColors[owner].default : "#A89F91";
+        const score = owner !== "neutral" && nationScores?.[owner];
         
         return (
           <div className="absolute top-2 left-2 bg-[#1a1a1a] border border-[#C9A227] rounded-lg px-3 py-2 text-sm animate-fade-in z-10">
@@ -371,6 +378,11 @@ const KoreaMap = memo(function KoreaMap({
             <p className="text-xs">
               영유국: <span style={{ color: ownerColor }}>{ownerName}</span>
             </p>
+            {score !== undefined && (
+              <p className="text-xs mt-1">
+                총합 점수: <span className="text-[#C9A227] font-bold">{score.toLocaleString()}</span>
+              </p>
+            )}
           </div>
         );
       })()}
