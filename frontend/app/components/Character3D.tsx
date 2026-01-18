@@ -60,26 +60,22 @@ function Model({
 
   const { scene, animations } = useGLTF(modelPath);
   const { actions } = useAnimations(animations, scene);
-  const hasPlayedRef = useRef(false);
 
-  // 애니메이션 재생
+  // 애니메이션 재생 - 반복 재생
   useEffect(() => {
     if (!actions || Object.keys(actions).length === 0) return;
+    if (!shouldPlay) return;
     
     const action = Object.values(actions)[0];
     if (!action) return;
 
-    if (shouldPlay && !hasPlayedRef.current) {
-      action.reset();
-      action.setLoop(THREE.LoopOnce, 1); // 한 번만 재생
-      action.clampWhenFinished = true; // 끝에서 멈춤
-      action.play();
-      hasPlayedRef.current = true;
-    } else if (!shouldPlay) {
-      // shouldPlay가 false가 되면 플래그 리셋
-      hasPlayedRef.current = false;
+    action.reset();
+    action.setLoop(THREE.LoopRepeat, Infinity); // 반복 재생
+    action.play();
+
+    return () => {
       action.stop();
-    }
+    };
   }, [actions, shouldPlay, modelPath]);
 
   return (
