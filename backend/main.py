@@ -288,8 +288,68 @@ async def handle_game_turn(
         for c in all_countries_db
     }
     
+    # 유저 국가의 외교 정보 가져오기
+    diplomacy_relations = session.exec(
+        select(Diplomacy).where(Diplomacy.sourceID == country_id)
+    ).all()
+    user_diplomacy = [
+        {
+            "targetName": d.targetName,
+            "status": d.status,
+            "favorability": d.favorability
+        }
+        for d in diplomacy_relations
+    ]
+    
+    # 유저 국가의 군사 유닛 정보 가져오기
+    military_units = session.exec(
+        select(MilitaryUnit).where(MilitaryUnit.countryID == country_id)
+    ).all()
+    user_military = [
+        {
+            "name": u.name,
+            "count": u.count,
+            "icon": u.icon,
+            "unit_type": u.unit_type
+        }
+        for u in military_units
+    ]
+    
+    # 다른 국가들의 외교 및 군사 정보도 수집
+    for other_country in all_countries_db:
+        if other_country.id != country_id:
+            # 다른 국가의 외교 정보
+            other_diplomacy = session.exec(
+                select(Diplomacy).where(Diplomacy.sourceID == other_country.id)
+            ).all()
+            all_countries_dict[other_country.id]["diplomacy"] = [
+                {
+                    "targetName": d.targetName,
+                    "status": d.status,
+                    "favorability": d.favorability
+                }
+                for d in other_diplomacy
+            ]
+            
+            # 다른 국가의 군사 유닛 정보
+            other_military = session.exec(
+                select(MilitaryUnit).where(MilitaryUnit.countryID == other_country.id)
+            ).all()
+            all_countries_dict[other_country.id]["military_units"] = [
+                {
+                    "name": u.name,
+                    "count": u.count,
+                    "icon": u.icon,
+                    "unit_type": u.unit_type
+                }
+                for u in other_military
+            ]
+    
     # 유저 국가 Gemini API 호출
     current_stats = all_countries_dict[country_id]
+    current_stats["diplomacy"] = user_diplomacy
+    current_stats["military_units"] = user_military
+    
     ai_data = await get_gemini_game_data(user_input, current_stats, all_countries_dict)
 
     # 유저 국가 DB 수치 업데이트
@@ -414,8 +474,9 @@ async def handle_game_turn(
     other_countries_news = {}
     for other_country_db in all_countries_db:
         if other_country_db.id != country_id:
-            # AI 턴 진행
-            other_stats = all_countries_dict[other_country_db.id]
+            # AI 국가의 외교 및 군사 정보 포함
+            other_stats = all_countries_dict[other_country_db.id].copy()
+            # 외교 및 군사 정보는 이미 all_countries_dict에 포함되어 있음
             ai_turn_data = await get_ai_country_turn(other_stats, all_countries_dict)
             
             # 스탯 업데이트
