@@ -1,10 +1,10 @@
 from sqlmodel import create_engine, SQLModel, Session
 import os
 
-# SQLite 데이터베이스 설정
-sqlite_url = "sqlite:///./game.db"
+# SQLite 데이터베이스 설정 (Alembic과 동일 경로 사용)
+sqlite_url = "sqlite:///backend/game.db"
 engine = create_engine(
-    sqlite_url, 
+    sqlite_url,
     connect_args={"check_same_thread": False},
     echo=False
 )

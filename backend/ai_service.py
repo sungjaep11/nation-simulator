@@ -1,13 +1,26 @@
 import os
 import json
 from typing import Optional
-import google.generativeai as genai
 from dotenv import load_dotenv
+
+# Prefer new google.genai client; fallback to legacy only if unavailable
+try:
+    from google.genai import Client as GenaiClient  # type: ignore
+    _GENAI_LIB = "google.genai"
+except Exception:
+    GenaiClient = None  # type: ignore
+    _GENAI_LIB = None
+    try:
+        import google.generativeai as genai_legacy  # type: ignore
+        _GENAI_LIB = "google.generativeai"
+    except Exception:
+        genai_legacy = None  # type: ignore
+        _GENAI_LIB = None
 
 load_dotenv()
 
-# Store API key globally
 _api_key = None
+_client = None
 
 def _get_api_key():
     global _api_key
@@ -16,9 +29,32 @@ def _get_api_key():
         if not api_key or api_key == "your_api_key_here":
             raise ValueError("GEMINI_API_KEY not configured in .env file")
         _api_key = api_key
-        # Configure genai (using type: ignore for type checker)
-        genai.configure(api_key=api_key)  # type: ignore
     return _api_key
+
+def _get_client():
+    global _client
+    if _client is None:
+        api_key = _get_api_key()
+        if _GENAI_LIB == "google.genai" and GenaiClient is not None:
+            _client = GenaiClient(api_key=api_key)
+        elif _GENAI_LIB == "google.generativeai" and genai_legacy is not None:
+            genai_legacy.configure(api_key=api_key)  # type: ignore
+            _client = genai_legacy  # module acts as client; use per-call model
+        else:
+            raise RuntimeError("No Gemini client available. Install google-genai.")
+    return _client
+
+def _generate_text(prompt: str, model_name: str = "gemini-2.5-flash") -> str:
+    client = _get_client()
+    if _GENAI_LIB == "google.genai":
+        response = client.models.generate_content(model=model_name, contents=prompt)
+        return response.text
+    elif _GENAI_LIB == "google.generativeai":
+        model = client.GenerativeModel(model_name)
+        response = model.generate_content(prompt)
+        return response.text
+    else:
+        raise RuntimeError("Unsupported Gemini client configuration")
 
 def _get_mock_response(user_input: str, current_stats: dict) -> dict:
     """Return mock response for testing/quota limits"""
@@ -41,7 +77,7 @@ async def get_gemini_game_data(user_input: str, current_stats: dict, all_countri
         all_countries: 모든 국가의 현재 상태 (dict)
     """
     try:
-        _get_api_key()  # Ensure API key is configured
+        _get_client()  # Ensure client is configured
         
         other_countries_info = ""
         if all_countries:
@@ -106,11 +142,10 @@ async def get_gemini_game_data(user_input: str, current_stats: dict, all_countri
         """
         
         # 텍스트 생성 요청
-        model = genai.GenerativeModel('gemini-2.5-flash')  # type: ignore
-        response = model.generate_content(prompt)
+        response_text = _generate_text(prompt, model_name='gemini-2.5-flash')
         
         # JSON 문자열 추출 및 파싱
-        clean_json = response.text.replace('```json', '').replace('```', '').strip()
+        clean_json = response_text.replace('```json', '').replace('```', '').strip()
         result = json.loads(clean_json)
         
         # 디버깅: Gemini API 응답 출력
@@ -148,7 +183,7 @@ async def get_ai_country_turn(country_stats: dict, all_countries: dict) -> dict:
         턴 결과 (scenario, public_news, secret_news, changes, actions)
     """
     try:
-        _get_api_key()  # Ensure API key is configured
+        _get_client()  # Ensure client is configured
         
         # 외교 및 군사 정보 추출
         diplomacy_info = ""
@@ -209,10 +244,9 @@ async def get_ai_country_turn(country_stats: dict, all_countries: dict) -> dict:
         """
         
         # 텍스트 생성 요청
-        model = genai.GenerativeModel('gemini-2.5-flash')  # type: ignore
-        response = model.generate_content(prompt)
+        response_text = _generate_text(prompt, model_name='gemini-2.5-flash')
         
-        clean_json = response.text.replace('```json', '').replace('```', '').strip()
+        clean_json = response_text.replace('```json', '').replace('```', '').strip()
         result = json.loads(clean_json)
         
         if 'actions' not in result:
