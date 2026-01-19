@@ -39,6 +39,22 @@ interface CommandLog {
   response: string;
   timestamp: Date;
   isLoading?: boolean;
+  loadingMessageIndex?: number;
+}
+
+interface DiplomacyRelation {
+  id: number;
+  targetName: string;
+  status: string;
+  favorability: number;
+}
+
+interface MilitaryUnit {
+  id: number;
+  name: string;
+  count: number;
+  icon: string;
+  unit_type?: string;
 }
 
 // 슬롯머신 단일 자릿수 컴포넌트
@@ -337,98 +353,246 @@ function NewsCard({ news, index }: { news: NewsItem; index: number }) {
   );
 }
 
-// 외교 정보 컴포넌트
-function DiplomacyInfo({ selectedNation }: { selectedNation: NationType }) {
-  const relations = {
-    goguryeo: [
-      { nation: "백제", status: "적대", favorability: -60 },
-      { nation: "신라", status: "중립", favorability: 10 },
-    ],
-    baekje: [
-      { nation: "고구려", status: "적대", favorability: -60 },
-      { nation: "신라", status: "경쟁", favorability: -30 },
-    ],
-    silla: [
-      { nation: "고구려", status: "중립", favorability: 10 },
-      { nation: "백제", status: "경쟁", favorability: -30 },
-    ],
+// 국가 ID를 한글 이름으로 변환
+function getNationNameInKorean(nationIdOrName: string): string {
+  const nationMap: Record<string, string> = {
+    "goguryeo": "고구려",
+    "baekje": "백제",
+    "silla": "신라",
+    "고구려": "고구려",
+    "백제": "백제",
+    "신라": "신라",
   };
+  return nationMap[nationIdOrName.toLowerCase()] || nationIdOrName;
+}
 
-  if (!selectedNation) return null;
+// 외교 정보 컴포넌트
+function DiplomacyInfo({ 
+  diplomacyData, 
+  prevDiplomacyData,
+  selectedNation 
+}: { 
+  diplomacyData: DiplomacyRelation[];
+  prevDiplomacyData?: DiplomacyRelation[];
+  selectedNation: NationType;
+}) {
+  // 모든 국가 목록 (선택된 국가 제외)
+  const allNations: NationId[] = ["goguryeo", "baekje", "silla"];
+  const otherNations = allNations.filter(n => n !== selectedNation);
+  
+  // 외교 관계 데이터를 맵으로 변환 (빠른 조회를 위해)
+  const diplomacyMap = new Map<string, DiplomacyRelation>();
+  (diplomacyData || []).forEach(rel => {
+    // targetName이 국가 ID인지 한글 이름인지 확인하고 정규화
+    const normalizedName = rel.targetName.toLowerCase();
+    const nationId = normalizedName === "고구려" || normalizedName === "goguryeo" ? "goguryeo" :
+                     normalizedName === "백제" || normalizedName === "baekje" ? "baekje" :
+                     normalizedName === "신라" || normalizedName === "silla" ? "silla" : rel.targetName;
+    diplomacyMap.set(nationId, rel);
+  });
+
+  const getPrevFavorability = (targetName: string): number | undefined => {
+    if (!prevDiplomacyData) return undefined;
+    const prev = prevDiplomacyData.find(d => {
+      const normalized = d.targetName.toLowerCase();
+      return normalized === targetName.toLowerCase() || 
+             (normalized === "고구려" && targetName === "goguryeo") ||
+             (normalized === "백제" && targetName === "baekje") ||
+             (normalized === "신라" && targetName === "silla") ||
+             (normalized === "goguryeo" && targetName === "goguryeo") ||
+             (normalized === "baekje" && targetName === "baekje") ||
+             (normalized === "silla" && targetName === "silla");
+    });
+    return prev?.favorability;
+  };
 
   return (
     <div className="space-y-2">
-      {relations[selectedNation].map((rel, idx) => (
-        <div
-          key={idx}
-          className="flex items-center justify-between p-2 glass-panel rounded-lg"
-        >
-          <span className="text-sm text-[#F5F5DC]">{rel.nation}</span>
-          <div className="flex items-center gap-2">
-            <span
-              className={`text-xs px-2 py-1 rounded ${
-                rel.favorability > 0
-                  ? "bg-green-900/50 text-green-400"
-                  : rel.favorability < -30
-                    ? "bg-red-900/50 text-red-400"
-                    : "bg-yellow-900/50 text-yellow-400"
-              }`}
-            >
-              {rel.status}
-            </span>
-            <span
-              className={`text-xs font-mono ${
-                rel.favorability > 0 ? "text-green-400" : "text-red-400"
-              }`}
-            >
-              {rel.favorability > 0 ? "+" : ""}
-              {rel.favorability}
-            </span>
+      {otherNations.map((nationId) => {
+        const rel = diplomacyMap.get(nationId);
+        // 관계가 없으면 기본 중립 관계 생성
+        const relation: DiplomacyRelation = rel || {
+          id: 0,
+          targetName: nationId,
+          status: "중립",
+          favorability: 0
+        };
+        
+        const prevFavorability = getPrevFavorability(nationId);
+        const favorabilityChanged = prevFavorability !== undefined && prevFavorability !== relation.favorability;
+        const isIncreased = favorabilityChanged && relation.favorability > prevFavorability;
+        const isDecreased = favorabilityChanged && relation.favorability < prevFavorability;
+        
+        // 국가 이름을 한글로 변환
+        const displayName = getNationNameInKorean(nationId);
+
+        return (
+          <div
+            key={nationId}
+            className="flex items-center justify-between p-2 glass-panel rounded-lg"
+          >
+            <span className="text-sm text-[#F5F5DC] flex-shrink-0">{displayName}</span>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <div className="flex items-center gap-1 min-w-[45px] justify-end">
+                <span
+                  className={`text-xs font-mono ${
+                    relation.favorability > 0 ? "text-green-400" : "text-red-400"
+                  }`}
+                >
+                  {relation.favorability > 0 ? "+" : ""}
+                  {relation.favorability}
+                </span>
+                {favorabilityChanged && (
+                  <span 
+                    className={`text-xs font-bold transition-all duration-300 ${
+                      isIncreased ? "text-green-500" : isDecreased ? "text-red-500" : ""
+                    }`}
+                  >
+                    {isIncreased ? "▲" : isDecreased ? "▼" : ""}
+                  </span>
+                )}
+              </div>
+              <span
+                className={`text-xs px-2 py-1 rounded whitespace-nowrap min-w-[50px] text-center ${
+                  relation.favorability > 0
+                    ? "bg-green-900/50 text-green-400"
+                    : relation.favorability < -30
+                      ? "bg-red-900/50 text-red-400"
+                      : "bg-yellow-900/50 text-yellow-400"
+                }`}
+              >
+                {relation.status}
+              </span>
+            </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
 
-// 군사 정보 컴포넌트
-function MilitaryInfo({ selectedNation }: { selectedNation: NationType }) {
-  const military = {
-    goguryeo: [
-      { name: "철기병", count: 5000, icon: "🐎" },
-      { name: "궁병대", count: 8000, icon: "🏹" },
-      { name: "보병", count: 15000, icon: "⚔️" },
-    ],
-    baekje: [
-      { name: "수군", count: 6000, icon: "⛵" },
-      { name: "창병대", count: 7000, icon: "🗡️" },
-      { name: "보병", count: 12000, icon: "⚔️" },
-    ],
-    silla: [
-      { name: "화랑도", count: 3000, icon: "🌸" },
-      { name: "기마대", count: 4000, icon: "🐎" },
-      { name: "보병", count: 18000, icon: "⚔️" },
-    ],
-  };
+// 군사 유닛 이름 정리 함수 (불필요한 prefix 제거)
+function cleanMilitaryUnitName(name: string): string {
+  // "sword 백제 정예병" -> "정예병"
+  // "백제 정예병" -> "정예병"
+  // "sword" -> "sword" (국가명이 없으면 그대로)
+  
+  // 국가명 제거
+  const nationNames = ["고구려", "백제", "신라", "goguryeo", "baekje", "silla"];
+  let cleaned = name;
+  
+  // 국가명 제거
+  for (const nation of nationNames) {
+    cleaned = cleaned.replace(new RegExp(nation, "gi"), "").trim();
+  }
+  
+  // 무기 타입 prefix 제거 (sword, bow, spear 등)
+  const weaponPrefixes = ["sword", "bow", "spear", "shield", "arrow", "lance"];
+  for (const prefix of weaponPrefixes) {
+    if (cleaned.toLowerCase().startsWith(prefix + " ")) {
+      cleaned = cleaned.substring(prefix.length + 1).trim();
+    }
+  }
+  
+  // 빈 문자열이면 원본 반환
+  return cleaned || name;
+}
 
-  if (!selectedNation) return null;
+// 유닛 이름에 따른 기본 이모티콘 매핑
+function getUnitIcon(icon: string, unitName: string): string {
+  // icon이 이미 이모티콘이면 그대로 사용
+  if (icon && /[\u{1F300}-\u{1F9FF}]/u.test(icon)) {
+    return icon;
+  }
+  
+  // icon이 텍스트이거나 없으면 유닛 이름에 따라 매핑
+  const cleanedName = cleanMilitaryUnitName(unitName).toLowerCase();
+  
+  // 유닛 타입별 이모티콘 매핑
+  if (cleanedName.includes("정예") || cleanedName.includes("elite") || cleanedName.includes("sword")) {
+    return "⚔️";
+  } else if (cleanedName.includes("궁") || cleanedName.includes("bow") || cleanedName.includes("archer")) {
+    return "🏹";
+  } else if (cleanedName.includes("기마") || cleanedName.includes("horse") || cleanedName.includes("cavalry")) {
+    return "🐎";
+  } else if (cleanedName.includes("수군") || cleanedName.includes("navy") || cleanedName.includes("ship")) {
+    return "⛵";
+  } else if (cleanedName.includes("화랑") || cleanedName.includes("hwarang")) {
+    return "🌸";
+  } else if (cleanedName.includes("창") || cleanedName.includes("spear") || cleanedName.includes("lance")) {
+    return "🗡️";
+  } else if (cleanedName.includes("보병") || cleanedName.includes("infantry") || cleanedName.includes("soldier")) {
+    return "⚔️";
+  }
+  
+  // 기본값
+  return "⚔️";
+}
+
+// 군사 정보 컴포넌트
+function MilitaryInfo({ 
+  militaryData, 
+  prevMilitaryData,
+  turnChanged 
+}: { 
+  militaryData: MilitaryUnit[];
+  prevMilitaryData?: MilitaryUnit[];
+  turnChanged?: boolean;
+}) {
+  if (!militaryData || militaryData.length === 0) {
+    return (
+      <p className="text-[#6B6B6B] text-center py-4 text-sm">
+        군사 유닛이 없습니다.
+      </p>
+    );
+  }
+
+  const getPrevCount = (name: string): number | undefined => {
+    if (!prevMilitaryData) return undefined;
+    // 이름이 정리되기 전의 원본 이름으로 찾기
+    const prev = prevMilitaryData.find(u => u.name === name);
+    return prev?.count;
+  };
 
   return (
     <div className="space-y-2">
-      {military[selectedNation].map((unit, idx) => (
-        <div
-          key={idx}
-          className="flex items-center justify-between p-2 glass-panel rounded-lg"
-        >
-          <div className="flex items-center gap-2">
-            <span>{unit.icon}</span>
-            <span className="text-sm text-[#F5F5DC]">{unit.name}</span>
+      {militaryData.map((unit) => {
+        const prevCount = getPrevCount(unit.name);
+        const countChanged = turnChanged && prevCount !== undefined && prevCount !== unit.count;
+        const isIncreased = countChanged && unit.count > prevCount;
+        const isDecreased = countChanged && unit.count < prevCount;
+        
+        // 유닛 이름 정리
+        const displayName = cleanMilitaryUnitName(unit.name);
+        // 이모티콘 가져오기 (텍스트인 경우 기본 이모티콘 사용)
+        const displayIcon = getUnitIcon(unit.icon || "", unit.name);
+
+        return (
+          <div
+            key={unit.id}
+            className="flex items-center justify-between p-2 glass-panel rounded-lg"
+          >
+            <div className="flex items-center gap-2">
+              <span>{displayIcon}</span>
+              <span className="text-sm text-[#F5F5DC]">{displayName}</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <span className="text-sm font-mono text-[#C9A227]">
+                {unit.count.toLocaleString()}명
+              </span>
+              {countChanged && (
+                <span 
+                  className={`text-xs font-bold transition-all duration-300 ${
+                    isIncreased ? "text-green-500" : isDecreased ? "text-red-500" : ""
+                  }`}
+                >
+                  {isIncreased ? "▲" : isDecreased ? "▼" : ""}
+                </span>
+              )}
+            </div>
           </div>
-          <span className="text-sm font-mono text-[#C9A227]">
-            {unit.count.toLocaleString()}명
-          </span>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -475,6 +639,35 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
   const [commandLogs, setCommandLogs] = useState<CommandLog[]>([]);
   const [financeIncrease, setFinanceIncrease] = useState(0);
+  
+  // 재치있는 로딩 메시지들
+  const loadingMessages = [
+    "군주의 지혜를 모으는 중...",
+    "신하들이 명령을 해석하는 중...",
+    "천하의 기운이 움직이는 중...",
+  ];
+  
+  // 로딩 중인 카드들의 메시지를 3초마다 순환
+  useEffect(() => {
+    const loadingLogs = commandLogs.filter(log => log.isLoading);
+    if (loadingLogs.length === 0) return;
+    
+    const interval = setInterval(() => {
+      setCommandLogs((prev) =>
+        prev.map((log) => {
+          if (log.isLoading && log.loadingMessageIndex !== undefined) {
+            return {
+              ...log,
+              loadingMessageIndex: ((log.loadingMessageIndex ?? 0) + 1) % loadingMessages.length,
+            };
+          }
+          return log;
+        })
+      );
+    }, 3000);
+    
+    return () => clearInterval(interval);
+  }, [commandLogs, loadingMessages.length]);
   const prevFinanceRef = useRef(stats.finance);
   const prevStatsRef = useRef<GameStats>({ ...stats });
   const prevTurnRef = useRef(turn);
@@ -512,6 +705,10 @@ export default function Home() {
     },
   ]);
   const [activeTab, setActiveTab] = useState<"diplomacy" | "military">("diplomacy");
+  const [diplomacyData, setDiplomacyData] = useState<DiplomacyRelation[]>([]);
+  const [militaryData, setMilitaryData] = useState<MilitaryUnit[]>([]);
+  const prevDiplomacyDataRef = useRef<DiplomacyRelation[]>([]);
+  const prevMilitaryDataRef = useRef<MilitaryUnit[]>([]);
 
   const nationInfo = {
     goguryeo: {
@@ -560,6 +757,7 @@ export default function Home() {
       response: "",
       timestamp: new Date(),
       isLoading: true,
+      loadingMessageIndex: 0,
     };
     setCommandLogs((prev) => [...prev, loadingLog]);
 
@@ -612,11 +810,16 @@ export default function Home() {
         newTurn = turn + 1;
       }
       
-      // 턴이 변경되면 이전 stats 저장
+      // 턴이 변경되면 이전 stats 및 외교/군사 데이터 저장
       const isTurnChanged = newTurn !== prevTurnRef.current;
       if (isTurnChanged) {
         prevStatsRef.current = { ...stats };
         prevTurnRef.current = newTurn;
+        // 이전 외교/군사 데이터 저장
+        prevDiplomacyDataRef.current = [...diplomacyData];
+        prevMilitaryDataRef.current = [...militaryData];
+        // 이전 총합 점수 저장
+        prevTotalScoreRef.current = totalScore;
       }
 
       // 스탯 업데이트
@@ -675,6 +878,33 @@ export default function Home() {
       } catch (scoresError) {
         console.warn("국가 점수 업데이트 실패:", scoresError);
       }
+
+      // 외교/군사 데이터 업데이트
+      if (selectedNation) {
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+        
+        // 외교 데이터 가져오기
+        try {
+          const diplomacyResponse = await fetch(`${apiUrl}/api/country/${selectedNation}/diplomacy`);
+          if (diplomacyResponse.ok) {
+            const diplomacyData = await diplomacyResponse.json() as DiplomacyRelation[];
+            setDiplomacyData(diplomacyData);
+          }
+        } catch (diplomacyError) {
+          console.warn("외교 데이터 업데이트 실패:", diplomacyError);
+        }
+
+        // 군사 데이터 가져오기
+        try {
+          const militaryResponse = await fetch(`${apiUrl}/api/country/${selectedNation}/military`);
+          if (militaryResponse.ok) {
+            const militaryData = await militaryResponse.json() as MilitaryUnit[];
+            setMilitaryData(militaryData);
+          }
+        } catch (militaryError) {
+          console.warn("군사 데이터 업데이트 실패:", militaryError);
+        }
+      }
     } catch (error) {
       console.error("API 호출 실패:", error);
       
@@ -719,10 +949,6 @@ export default function Home() {
 
   const prevTotalScoreRef = useRef(totalScore);
   const prevTotalScore = prevTotalScoreRef.current;
-  
-  useEffect(() => {
-    prevTotalScoreRef.current = totalScore;
-  }, [totalScore]);
 
   // 초기 로딩 방지
   const [mounted, setMounted] = useState(false);
@@ -868,6 +1094,85 @@ export default function Home() {
               clearTimeout(newsTimeoutId);
               // 뉴스는 실패해도 계속 진행 (필수 데이터가 아니므로)
               console.warn("뉴스 데이터 로드 실패:", newsError);
+            }
+            
+            // 명령기록 데이터 가져오기
+            const logsController = new AbortController();
+            const logsTimeoutId = setTimeout(() => logsController.abort(), 5000);
+            
+            try {
+              const logsResponse = await fetch(`${apiUrl}/api/country/${nationFromUrl}/logs`, {
+                signal: logsController.signal,
+              });
+              
+              clearTimeout(logsTimeoutId);
+              
+              if (logsResponse.ok) {
+                const logsData = await logsResponse.json();
+                if (Array.isArray(logsData) && logsData.length > 0) {
+                  // 최신순으로 정렬 (백엔드에서 이미 desc로 정렬되어 있지만, 안전을 위해)
+                  const sortedLogs = logsData
+                    .sort((a: any, b: any) => {
+                      const timeA = new Date(a.timestamp).getTime();
+                      const timeB = new Date(b.timestamp).getTime();
+                      return timeB - timeA;
+                    })
+                    .map((log: any): CommandLog => ({
+                      id: log.id,
+                      command: log.command,
+                      response: log.response,
+                      timestamp: new Date(log.timestamp),
+                      isLoading: false,
+                    }));
+                  setCommandLogs(sortedLogs);
+                }
+              }
+            } catch (logsError) {
+              clearTimeout(logsTimeoutId);
+              // 명령기록은 실패해도 계속 진행 (필수 데이터가 아니므로)
+              console.warn("명령기록 데이터 로드 실패:", logsError);
+            }
+            
+            // 외교 데이터 가져오기
+            const diplomacyController = new AbortController();
+            const diplomacyTimeoutId = setTimeout(() => diplomacyController.abort(), 5000);
+            
+            try {
+              const diplomacyResponse = await fetch(`${apiUrl}/api/country/${nationFromUrl}/diplomacy`, {
+                signal: diplomacyController.signal,
+              });
+              
+              clearTimeout(diplomacyTimeoutId);
+              
+              if (diplomacyResponse.ok) {
+                const diplomacyData = await diplomacyResponse.json() as DiplomacyRelation[];
+                setDiplomacyData(diplomacyData);
+                prevDiplomacyDataRef.current = [...diplomacyData];
+              }
+            } catch (diplomacyError) {
+              clearTimeout(diplomacyTimeoutId);
+              console.warn("외교 데이터 로드 실패:", diplomacyError);
+            }
+            
+            // 군사 데이터 가져오기
+            const militaryController = new AbortController();
+            const militaryTimeoutId = setTimeout(() => militaryController.abort(), 5000);
+            
+            try {
+              const militaryResponse = await fetch(`${apiUrl}/api/country/${nationFromUrl}/military`, {
+                signal: militaryController.signal,
+              });
+              
+              clearTimeout(militaryTimeoutId);
+              
+              if (militaryResponse.ok) {
+                const militaryData = await militaryResponse.json() as MilitaryUnit[];
+                setMilitaryData(militaryData);
+                prevMilitaryDataRef.current = [...militaryData];
+              }
+            } catch (militaryError) {
+              clearTimeout(militaryTimeoutId);
+              console.warn("군사 데이터 로드 실패:", militaryError);
             }
           } catch (statusError) {
             clearTimeout(timeoutId);
@@ -1153,7 +1458,7 @@ export default function Home() {
                           <div className="flex items-center gap-2 ml-5 mt-2">
                             <div className="loading-spinner" style={{ width: "16px", height: "16px" }}></div>
                             <p className="text-[#A89F91] text-sm italic">
-                              {selectedNation && nationInfo[selectedNation].name}가 명령 하달 중...
+                              {loadingMessages[log.loadingMessageIndex ?? 0]}
                             </p>
                           </div>
                         ) : (
@@ -1211,9 +1516,23 @@ export default function Home() {
             {/* 탭 컨텐츠 */}
             <div className="flex-1 overflow-y-auto">
               {activeTab === "diplomacy" ? (
-                <DiplomacyInfo selectedNation={selectedNation} />
+                selectedNation ? (
+                  <DiplomacyInfo 
+                    diplomacyData={diplomacyData}
+                    prevDiplomacyData={turnChanged ? prevDiplomacyDataRef.current : undefined}
+                    selectedNation={selectedNation}
+                  />
+                ) : (
+                  <p className="text-[#6B6B6B] text-center py-4 text-sm">
+                    국가를 선택해주세요.
+                  </p>
+                )
               ) : (
-                <MilitaryInfo selectedNation={selectedNation} />
+                <MilitaryInfo 
+                  militaryData={militaryData}
+                  prevMilitaryData={turnChanged ? prevMilitaryDataRef.current : undefined}
+                  turnChanged={turnChanged}
+                />
               )}
             </div>
           </div>
