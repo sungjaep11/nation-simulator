@@ -1152,12 +1152,12 @@ export default function Home() {
               if (logsResponse.ok) {
                 const logsData = await logsResponse.json();
                 if (Array.isArray(logsData) && logsData.length > 0) {
-                  // 최신순으로 정렬 (백엔드에서 이미 desc로 정렬되어 있지만, 안전을 위해)
+                  // 오래된 순으로 정렬 (최신 것이 맨 밑에 보이도록)
                   const sortedLogs = logsData
                     .sort((a: any, b: any) => {
                       const timeA = new Date(a.timestamp).getTime();
                       const timeB = new Date(b.timestamp).getTime();
-                      return timeB - timeA;
+                      return timeA - timeB; // 오름차순 정렬
                     })
                     .map((log: any): CommandLog => ({
                       id: log.id,
@@ -1361,7 +1361,7 @@ export default function Home() {
               value={stats.finance} 
               prevValue={prevStatsRef.current.finance}
               showArrow={turnChanged}
-              prefix="$" 
+              suffix="원" 
               allNationStats={allNationStats}
               allNationScores={allNationScores}
               statType="finance"
@@ -1544,7 +1544,21 @@ export default function Home() {
                     : "bg-black/10 backdrop-blur-md text-[#A89F91] hover:bg-black/20 border border-white/10 shadow-sm"
                 }`}
               >
-                🤝 외교
+                <div className="flex items-center justify-center gap-1">
+                  <span>🤝 외교</span>
+                  {(() => {
+                    if (diplomacyData.length === 0 || prevDiplomacyDataRef.current.length === 0) return null;
+                    const currentTotal = diplomacyData.reduce((sum, rel) => sum + rel.favorability, 0);
+                    const prevTotal = prevDiplomacyDataRef.current.reduce((sum, rel) => sum + rel.favorability, 0);
+                    const diff = currentTotal - prevTotal;
+                    if (diff > 0) {
+                      return <span className="text-xs font-bold text-green-500">▲</span>;
+                    } else if (diff < 0) {
+                      return <span className="text-xs font-bold text-red-500">▼</span>;
+                    }
+                    return null;
+                  })()}
+                </div>
               </button>
               <button
                 onClick={() => setActiveTab("military")}
@@ -1554,7 +1568,21 @@ export default function Home() {
                     : "bg-black/10 backdrop-blur-md text-[#A89F91] hover:bg-black/20 border border-white/10 shadow-sm"
                 }`}
               >
-                ⚔️ 군사
+                <div className="flex items-center justify-center gap-1">
+                  <span>⚔️ 군사</span>
+                  {(() => {
+                    if (militaryData.length === 0 || prevMilitaryDataRef.current.length === 0) return null;
+                    const currentTotal = militaryData.reduce((sum, unit) => sum + unit.count, 0);
+                    const prevTotal = prevMilitaryDataRef.current.reduce((sum, unit) => sum + unit.count, 0);
+                    const diff = currentTotal - prevTotal;
+                    if (diff > 0) {
+                      return <span className="text-xs font-bold text-green-500">▲</span>;
+                    } else if (diff < 0) {
+                      return <span className="text-xs font-bold text-red-500">▼</span>;
+                    }
+                    return null;
+                  })()}
+                </div>
               </button>
             </div>
 
