@@ -413,31 +413,31 @@ export default function Home() {
   const [turn, setTurn] = useState(1);
   const [username, setUsername] = useState<string>("");
   const [stats, setStats] = useState<GameStats>({
-    finance: 10000,
-    population: 500000,
-    happiness: 70,
-    military: 25000,
+    finance: 15000,
+    population: 60000,
+    happiness: 50,
+    military: 12,
   });
 
   // 각 나라별 기본 stats (현재는 선택된 나라만 업데이트되고, 나머지는 기본값 사용)
   const allNationStats: NationStats = {
     goguryeo: selectedNation === "goguryeo" ? stats : {
-      finance: 12000,
-      population: 600000,
-      happiness: 65,
-      military: 30000,
+      finance: 15000,
+      population: 80000,
+      happiness: 50,
+      military: 15,
     },
     baekje: selectedNation === "baekje" ? stats : {
-      finance: 11000,
-      population: 550000,
-      happiness: 75,
-      military: 20000,
+      finance: 18000,
+      population: 60000,
+      happiness: 50,
+      military: 10,
     },
     silla: selectedNation === "silla" ? stats : {
-      finance: 9000,
-      population: 450000,
-      happiness: 80,
-      military: 28000,
+      finance: 12000,
+      population: 45000,
+      happiness: 50,
+      military: 12,
     },
   };
   const [commandInput, setCommandInput] = useState("");
@@ -496,54 +496,85 @@ export default function Home() {
   };
 
   const handleCommand = useCallback(async () => {
-    if (!commandInput.trim() || isLoading) return;
+    if (!commandInput.trim() || isLoading || !selectedNation) return;
 
     setIsLoading(true);
     const command = commandInput;
     setCommandInput("");
 
-    // 시뮬레이션된 AI 응답 (실제로는 서버 호출)
-    await new Promise((resolve) => setTimeout(resolve, 1500));
+    try {
+      // Backend API 호출
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+      const response = await fetch(`${apiUrl}/api/action`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          user_input: command,
+          country_name: nationInfo[selectedNation].name
+        }),
+      });
 
-    const responses = [
-      "명령을 수행했습니다. 군사력이 증가했습니다.",
-      "외교 사절을 파견했습니다. 다음 턴에 결과가 나올 것입니다.",
-      "내정을 정비하여 백성들의 행복도가 상승했습니다.",
-      "세금을 조정하여 재정이 변동되었습니다.",
-    ];
-
-    const newLog: CommandLog = {
-      id: Date.now(),
-      command,
-      response: responses[Math.floor(Math.random() * responses.length)],
-      timestamp: new Date(),
-    };
-
-    setCommandLogs((prev) => [...prev, newLog]);
-
-    // 랜덤하게 스탯 변경
-    setStats((prev) => {
-      const newFinance = prev.finance + Math.floor(Math.random() * 2000) - 1000;
-      const financeDiff = newFinance - prev.finance;
-      
-      // 재정이 증가했을 때만 애니메이션 트리거
-      if (financeDiff > 0) {
-        setFinanceIncrease(financeDiff);
-        // 3초 후 리셋
-        setTimeout(() => setFinanceIncrease(0), 3000);
+      if (!response.ok) {
+        throw new Error(`API error: ${response.status}`);
       }
-      
-      return {
-        finance: newFinance,
-        population: prev.population + Math.floor(Math.random() * 10000) - 5000,
-        happiness: Math.min(100, Math.max(0, prev.happiness + Math.floor(Math.random() * 20) - 10)),
-        military: prev.military + Math.floor(Math.random() * 2000) - 1000,
-      };
-    });
 
-    setTurn((prev) => prev + 1);
-    setIsLoading(false);
-  }, [commandInput, isLoading]);
+      const data = await response.json();
+
+      // Backend 응답으로 상태 업데이트
+      const newLog: CommandLog = {
+        id: Date.now(),
+        command,
+        response: data.scenario,
+        timestamp: new Date(),
+      };
+
+      setCommandLogs((prev) => [...prev, newLog]);
+
+      // 뉴스 업데이트
+      if (data.news && Array.isArray(data.news)) {
+        setNews(data.news.map((n: string, i: number) => ({
+          id: Date.now() + i,
+          title: "조정 통보",
+          content: n,
+          type: "event" as const,
+        })));
+      }
+
+      // 스탯 업데이트
+      setStats((prev) => {
+        const newStats = data.updated_stats;
+        const financeDiff = newStats.finance - prev.finance;
+        
+        // 재정이 증가했을 때만 애니메이션 트리거
+        if (financeDiff > 0) {
+          setFinanceIncrease(financeDiff);
+          setTimeout(() => setFinanceIncrease(0), 3000);
+        }
+        
+        return {
+          finance: newStats.finance,
+          population: newStats.population,
+          happiness: newStats.happiness,
+          military: newStats.military,
+        };
+      });
+
+      setTurn((prev) => prev + 1);
+    } catch (error) {
+      console.error("API 호출 실패:", error);
+      
+      // 오류 발생 시 기본 응답
+      const errorLog: CommandLog = {
+        id: Date.now(),
+        command,
+        response: "명령 처리 중 오류가 발생했습니다. 백엔드 서버를 확인하세요.",
+        timestamp: new Date(),
+      };
+      setCommandLogs((prev) => [...prev, errorLog]);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [commandInput, isLoading, selectedNation, nationInfo]);
 
   // 재정 변화 감지
   useEffect(() => {

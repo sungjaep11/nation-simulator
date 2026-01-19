@@ -51,7 +51,7 @@ function Typewriter({
 }
 
 /* -------------------- Data -------------------- */
-interface Nation {
+interface Country {
   id: string;
   name: string;
   title: string;
@@ -59,14 +59,14 @@ interface Nation {
   color: string;
   description: string;
   stats: {
-    gold: number;
+    finance: number;
     population: number;
     military: number;
   };
   feature: string;
 }
 
-const nations: Nation[] = [
+const countries: Country[] = [
   {
     id: "goguryeo",
     name: "고구려",
@@ -75,7 +75,7 @@ const nations: Nation[] = [
     color: "#C41E3A",
     description:
       "강력한 군사력과 광활한 영토를 자랑하는 고구려는 철기병과 산성 전술로 유명합니다.",
-    stats: { gold: 15000, population: 80000, military: 15000 },
+    stats: { finance: 15000, population: 80000, military: 15 },
     feature: "강력한 군사력",
   },
   {
@@ -86,7 +86,7 @@ const nations: Nation[] = [
     color: "#1E90FF",
     description:
       "해상 무역과 문화 예술이 발달한 백제는 일본, 중국과의 교류가 활발합니다.",
-    stats: { gold: 18000, population: 60000, military: 10000 },
+  stats: { finance: 18000, population: 60000, military: 10 },
     feature: "풍부한 재정",
   },
   {
@@ -97,7 +97,7 @@ const nations: Nation[] = [
     color: "#FFD700",
     description:
       "화랑도의 충성과 백성들의 단결력으로 무장한 신라는 성장 중인 국가입니다.",
-    stats: { gold: 12000, population: 40000, military: 12000 },
+    stats: { finance: 12000, population: 45000, military: 12 },
     feature: "높은 단결력",
   },
 ];
@@ -106,7 +106,7 @@ const nations: Nation[] = [
 export default function SelectionPage() {
   const router = useRouter();
   const [videoPhase, setVideoPhase] = useState<'dystopia' | 'transition' | 'intro' | 'selection'>('dystopia');
-  const [selectedNation, setSelectedNation] = useState<string | null>(null);
+const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
   const [isExiting, setIsExiting] = useState(false);
   const [isFadingOut, setIsFadingOut] = useState(false);
   const [isFadingIn, setIsFadingIn] = useState(true);
@@ -118,7 +118,6 @@ export default function SelectionPage() {
   const introVideoRef = useRef<HTMLVideoElement>(null);
   const bgmRef = useRef<HTMLAudioElement>(null);
   const transitionTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const subtitleTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // 비디오 자동 재생
   useEffect(() => {
@@ -247,15 +246,15 @@ export default function SelectionPage() {
     }, 800);
   };
 
-  const handleSelectNation = (nationId: string) => {
-    setSelectedNation(prev => prev === nationId ? null : nationId);
+const handleSelectCountry = (countryId: string) => {
+  setSelectedCountry(prev => prev === countryId ? null : countryId);
   };
 
   const handleConfirm = () => {
-    if (!selectedNation) return;
+    if (!selectedCountry) return;
     setIsExiting(true);
     setTimeout(() => {
-      router.push(`/home?nation=${selectedNation}`);
+      router.push(`/home?country=${selectedCountry}`);
     }, 500);
   };
 
@@ -577,15 +576,15 @@ export default function SelectionPage() {
           </div>
 
           {/* Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 mb-6 sm:mb-8 items-start">
-            {nations.map((nation) => {
-              const isExpanded = selectedNation === nation.id;
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            {countries.map((country) => {
+              const isExpanded = selectedCountry === country.id;
 
               return (
                 <button
-                  key={nation.id}
-                  onClick={() => handleSelectNation(nation.id)}
-                  className={`relative rounded-2xl text-left transition-all duration-500 backdrop-blur-2xl border self-start overflow-hidden
+                  key={country.id}
+                  onClick={() => handleSelectCountry(country.id)}
+                  className={`relative rounded-2xl text-left transition-all duration-500 backdrop-blur-xl border-2 shadow-2xl
                     ${
                       isExpanded
                         ? "shadow-2xl"
@@ -631,32 +630,14 @@ export default function SelectionPage() {
                   )}
 
                   {/* Header */}
-                  <div className="relative z-10 flex items-center gap-3 sm:gap-4 mb-2">
-                    <span 
-                      style={{
-                        fontSize: 'clamp(2rem, 5vw, 3rem)',
-                        lineHeight: '1',
-                      }}
-                    >
-                      {nation.icon}
-                    </span>
+                  <div className="flex items-center gap-4 mb-2">
+                    <span className="text-5xl">{country.icon}</span>
                     <div>
-                      <h2 
-                        className="font-bold text-white"
-                        style={{
-                          fontSize: 'clamp(1.25rem, 3vw, 1.5rem)',
-                          lineHeight: '1.2',
-                        }}
-                      >
-                        {nation.name}
+                      <h2 className="text-2xl font-bold text-white">
+                        {country.name}
                       </h2>
-                      <p 
-                        style={{ 
-                          color: nation.color,
-                          fontSize: 'clamp(0.875rem, 2vw, 1rem)',
-                        }}
-                      >
-                        {nation.title}
+                      <p style={{ color: country.color }}>
+                        {country.title}
                       </p>
                     </div>
                   </div>
@@ -669,33 +650,26 @@ export default function SelectionPage() {
                         : "max-h-0 opacity-0"
                     }`}
                   >
-                    <p 
-                      className="text-[#A89F91] mb-2 leading-relaxed"
-                      style={{
-                        fontSize: 'clamp(0.75rem, 1.5vw, 0.875rem)',
-                      }}
-                    >
-                      {nation.description}
+                    <p className="text-[#A89F91] text-sm mb-2 leading-relaxed">
+                      {country.description}
                     </p>
 
                     <span
                       className="inline-block rounded-full mb-2"
                       style={{
-                        color: nation.color,
-                        border: `1px solid ${nation.color}60`,
-                        background: `${nation.color}20`,
-                        fontSize: 'clamp(0.625rem, 1.2vw, 0.75rem)',
-                        padding: 'clamp(0.25rem, 0.5vw, 0.5rem) clamp(0.5rem, 1vw, 0.75rem)',
+                        color: country.color,
+                        border: `1px solid ${country.color}60`,
+                        background: `${country.color}20`,
                       }}
                     >
-                      {nation.feature}
+                      {country.feature}
                     </span>
 
                     {/* Stats */}
                     <div className="grid grid-cols-3 gap-2 text-center mb-0">
-                      <Stat label="재정" value={nation.stats.gold} color="#FFD700" />
-                      <Stat label="인구" value={nation.stats.population} color="#90EE90" />
-                      <Stat label="군사력" value={nation.stats.military} color="#FF6B6B" />
+                      <Stat label="재정" value={country.stats.finance} color="#FFD700" />
+                      <Stat label="인구" value={country.stats.population} color="#90EE90" />
+                      <Stat label="군사력" value={country.stats.military} color="#FF6B6B" />
                     </div>
 
                     {/* Character */}
@@ -709,12 +683,12 @@ export default function SelectionPage() {
                       onMouseUp={(e) => e.stopPropagation()}
                     >
                       <Character3D
-                        key={`${nation.id}-${isExpanded}`}
-                        nation={nation.id as "goguryeo" | "baekje" | "silla"}
+                        key={`${country.id}-${isExpanded}`}
+                        nation={country.id as "goguryeo" | "baekje" | "silla"}
                         animationType="appearance"
                         size="full"
                         shouldPlay={isExpanded}
-                        x={nation.id === "silla" ? -0.5 : 0}
+                        x={country.id === "silla" ? -0.5 : 0}
                       />
                     </div>
                   </div>
@@ -735,21 +709,26 @@ export default function SelectionPage() {
           </div>
 
           {/* Confirm */}
-          {selectedNation && (() => {
-            const selectedNationData = nations.find(n => n.id === selectedNation);
-            return (
-              <div className="text-center">
+          <div className="text-center">
+            {(() => {
+              const selectedCountryData = countries.find(n => n.id === selectedCountry);
+              return (
                 <button
+                  disabled={!selectedCountry}
                   onClick={handleConfirm}
-                  className="rounded-xl font-bold transition-all duration-300 shadow-lg hover:shadow-xl hover:brightness-110"
-                  style={{
-                    backgroundColor: selectedNationData?.color,
-                    color: selectedNationData?.id === 'silla' ? '#0D0D0D' : '#FFFFFF',
-                    padding: 'clamp(0.75rem, 1.5vw, 1rem) clamp(2rem, 5vw, 3rem)',
-                    fontSize: 'clamp(0.875rem, 2vw, 1.125rem)',
-                  }}
+                  className={`px-12 py-4 rounded-xl text-lg font-bold transition-all duration-300 ${
+                    selectedCountry
+                      ? 'shadow-lg hover:shadow-xl hover:brightness-110'
+                      : 'bg-[#333] text-[#777] cursor-not-allowed'
+                  }`}
+                  style={selectedCountry && selectedCountryData ? {
+                    backgroundColor: selectedCountryData.color,
+                    color: selectedCountryData.id === 'silla' ? '#0D0D0D' : '#FFFFFF',
+                  } : {}}
                 >
-                  {selectedNationData?.name}로 시작하기
+                  {selectedCountry
+                    ? `${selectedCountryData?.name}로 시작하기`
+                    : '국가를 선택해주세요'}
                 </button>
               </div>
             );
