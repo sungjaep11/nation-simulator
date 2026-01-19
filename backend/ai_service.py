@@ -1,22 +1,23 @@
 import os
 import json
-from google import genai
-from google.genai import types
+import google.generativeai as genai
 from dotenv import load_dotenv
 
 load_dotenv()
 
-# Initialize client lazily when function is called
-_client = None
+# Store API key globally
+_api_key = None
 
-def _get_client():
-    global _client
-    if _client is None:
+def _get_api_key():
+    global _api_key
+    if _api_key is None:
         api_key = os.getenv("GEMINI_API_KEY")
         if not api_key or api_key == "your_api_key_here":
             raise ValueError("GEMINI_API_KEY not configured in .env file")
-        _client = genai.Client(api_key=api_key)
-    return _client
+        _api_key = api_key
+        # Configure genai (using type: ignore for type checker)
+        genai.configure(api_key=api_key)  # type: ignore
+    return _api_key
 
 def _get_mock_response(user_input: str, current_stats: dict) -> dict:
     """Return mock response for testing/quota limits"""
@@ -38,7 +39,7 @@ async def get_gemini_game_data(user_input: str, current_stats: dict, all_countri
         all_countries: 모든 국가의 현재 상태 (dict)
     """
     try:
-        client = _get_client()
+        _get_api_key()  # Ensure API key is configured
         
         other_countries_info = ""
         if all_countries:
@@ -78,10 +79,8 @@ async def get_gemini_game_data(user_input: str, current_stats: dict, all_countri
         """
         
         # 텍스트 생성 요청
-        response = client.models.generate_content(
-            model='gemini-2.5-flash',
-            contents=prompt
-        )
+        model = genai.GenerativeModel('gemini-1.5-flash')  # type: ignore
+        response = model.generate_content(prompt)
         
         # JSON 문자열 추출 및 파싱
         clean_json = response.text.replace('```json', '').replace('```', '').strip()
@@ -114,7 +113,7 @@ async def get_ai_country_turn(country_stats: dict, all_countries: dict) -> dict:
         턴 결과 (scenario, public_news, secret_news, changes, actions)
     """
     try:
-        client = _get_client()
+        _get_api_key()  # Ensure API key is configured
         
         prompt = f"""
 당신은 삼국시대 게임에서 "{country_stats['name']}" 국가를 운영하는 AI입니다.
@@ -148,10 +147,9 @@ async def get_ai_country_turn(country_stats: dict, all_countries: dict) -> dict:
 }}
         """
         
-        response = client.models.generate_content(
-            model='gemini-2.5-flash',
-            contents=prompt
-        )
+        # 텍스트 생성 요청
+        model = genai.GenerativeModel('gemini-1.5-flash')  # type: ignore
+        response = model.generate_content(prompt)
         
         clean_json = response.text.replace('```json', '').replace('```', '').strip()
         result = json.loads(clean_json)

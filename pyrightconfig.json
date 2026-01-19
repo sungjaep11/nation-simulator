@@ -4,10 +4,10 @@
   "executionEnvironments": [
     {
       "root": "backend",
-      "pythonVersion": "3.12",
-      "pythonPlatform": "Linux",
+      "pythonVersion": "3.10",
+      "pythonPlatform": "Darwin",
       "extraPaths": [
-        "backend/venv/lib/python3.12/site-packages"
+        "backend/venv/lib/python3.10/site-packages"
       ]
     }
   ]

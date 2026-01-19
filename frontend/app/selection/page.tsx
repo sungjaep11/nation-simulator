@@ -117,6 +117,7 @@ const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
   const dystopiaVideoRef = useRef<HTMLVideoElement>(null);
   const introVideoRef = useRef<HTMLVideoElement>(null);
   const bgmRef = useRef<HTMLAudioElement>(null);
+  const selectSoundRef = useRef<HTMLAudioElement>(null);
   const transitionTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // 비디오 자동 재생
@@ -221,14 +222,6 @@ const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
     }
   }, [videoPhase, isFadingIn]);
 
-  // 국가 선택 화면으로 넘어갔을 때 BGM 시작
-  useEffect(() => {
-    if (videoPhase === 'selection' && bgmRef.current) {
-      bgmRef.current.play().catch((error) => {
-        console.log("BGM 자동 재생 실패:", error);
-      });
-    }
-  }, [videoPhase]);
 
   const handleDystopiaEnd = () => {
     setIsFadingOut(true);
@@ -247,11 +240,26 @@ const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
   };
 
 const handleSelectCountry = (countryId: string) => {
+  // 선택 사운드 재생 (클릭할 때마다 재생)
+  const audio = new Audio('/selection/select.mp3');
+  audio.volume = 1.0;
+  audio.play().catch((error) => {
+    console.error("Select sound 재생 실패:", error);
+  });
+  
   setSelectedCountry(prev => prev === countryId ? null : countryId);
   };
 
   const handleConfirm = () => {
     if (!selectedCountry) return;
+    
+    // 시작 사운드 재생
+    const audio = new Audio('/selection/start.mp3');
+    audio.volume = 1.0;
+    audio.play().catch((error) => {
+      console.error("Start sound 재생 실패:", error);
+    });
+    
     setIsExiting(true);
     setTimeout(() => {
       router.push(`/home?country=${selectedCountry}`);
@@ -262,7 +270,6 @@ const handleSelectCountry = (countryId: string) => {
   if (videoPhase === 'dystopia') {
     return (
       <>
-        <audio ref={bgmRef} src="/bgm.mp3" loop preload="auto" style={{ display: 'none' }} />
         <div 
           className="fixed inset-0 z-50 flex items-center justify-center overflow-hidden bg-black cursor-pointer" 
           onClick={handleDystopiaEnd}
@@ -529,7 +536,7 @@ const handleSelectCountry = (countryId: string) => {
   // selection 화면
   return (
     <>
-      <audio ref={bgmRef} src="/bgm.mp3" loop preload="auto" style={{ display: 'none' }} />
+      <audio ref={selectSoundRef} src="/selection/select.mp3" preload="auto" style={{ display: 'none' }} />
 
       <div
         className={`h-screen flex justify-center items-center transition-opacity duration-500 ${
@@ -576,7 +583,7 @@ const handleSelectCountry = (countryId: string) => {
           </div>
 
           {/* Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8 items-start">
             {countries.map((country) => {
               const isExpanded = selectedCountry === country.id;
 
@@ -592,14 +599,12 @@ const handleSelectCountry = (countryId: string) => {
                     }`}
                   style={isExpanded ? {
                     padding: 'clamp(1rem, 2vw, 1.5rem)',
-                    transform: 'scale(1.05)',
                     backgroundColor: 'rgba(26, 26, 26, 0.15)',
                     borderColor: `${country.color}80`,
                     borderWidth: '2px',
                     boxShadow: `0 8px 32px 0 rgba(0, 0, 0, 0.37), 0 0 20px ${country.color}40`,
                   } : {
                     padding: 'clamp(0.75rem, 1.5vw, 1rem)',
-                    transform: 'scale(1)',
                     backgroundColor: 'rgba(26, 26, 26, 0.1)',
                     borderColor: 'rgba(255, 255, 255, 0.18)',
                     borderWidth: '1px',
@@ -709,30 +714,23 @@ const handleSelectCountry = (countryId: string) => {
           </div>
 
           {/* Confirm */}
-          <div className="text-center">
-            {(() => {
-              const selectedCountryData = countries.find(n => n.id === selectedCountry);
-              return (
+          {selectedCountry && (() => {
+            const selectedCountryData = countries.find(n => n.id === selectedCountry);
+            return (
+              <div className="text-center -mt-4">
                 <button
-                  disabled={!selectedCountry}
                   onClick={handleConfirm}
-                  className={`px-12 py-4 rounded-xl text-lg font-bold transition-all duration-300 ${
-                    selectedCountry
-                      ? 'shadow-lg hover:shadow-xl hover:brightness-110'
-                      : 'bg-[#333] text-[#777] cursor-not-allowed'
-                  }`}
-                  style={selectedCountry && selectedCountryData ? {
+                  className="px-12 py-4 rounded-xl text-lg font-bold transition-all duration-300 shadow-lg hover:shadow-xl hover:brightness-110"
+                  style={selectedCountryData ? {
                     backgroundColor: selectedCountryData.color,
                     color: selectedCountryData.id === 'silla' ? '#0D0D0D' : '#FFFFFF',
                   } : {}}
                 >
-                  {selectedCountry
-                    ? `${selectedCountryData?.name}로 시작하기`
-                    : '국가를 선택해주세요'}
+                  {selectedCountryData?.name}로 시작하기
                 </button>
-              );
-            })()}
-        </div>
+              </div>
+            );
+          })()}
         </div>
       </div>
     </>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import Image from "next/image";
 import KoreaMap from "../components/KoreaMap";
 import Character3D from "../components/Character3D";
@@ -172,6 +172,8 @@ function StatItem({
   icon,
   label,
   value,
+  prevValue,
+  showArrow = false,
   prefix = "",
   suffix = "",
   allNationStats,
@@ -182,6 +184,8 @@ function StatItem({
   icon: string;
   label: string;
   value: number;
+  prevValue?: number;
+  showArrow?: boolean;
   prefix?: string;
   suffix?: string;
   allNationStats?: NationStats;
@@ -190,6 +194,11 @@ function StatItem({
   turn?: number;
 }) {
   const [showTooltip, setShowTooltip] = useState(false);
+  
+  // 이전 값과 비교하여 화살표 표시 여부 결정
+  const shouldShowArrow = showArrow && prevValue !== undefined && prevValue !== value && statType !== "turn";
+  const isIncreased = shouldShowArrow && value > prevValue;
+  const isDecreased = shouldShowArrow && value < prevValue;
 
   const getRankingData = () => {
     if (!allNationStats || !statType || statType === "turn") return null;
@@ -234,13 +243,27 @@ function StatItem({
         <span className="text-[10px] text-[#A89F91] uppercase tracking-wider">
           {label}
         </span>
-        <span className="font-bold text-[#F5F5DC] font-serif">
-          <RollingNumber value={value} prefix={prefix} suffix={suffix} />
-        </span>
+        <div className="flex items-center gap-1">
+          <span className="font-bold text-[#F5F5DC] font-serif">
+            <RollingNumber value={value} prefix={prefix} suffix={suffix} />
+          </span>
+          {shouldShowArrow && (
+            <span 
+              className={`text-xs font-bold transition-all duration-300 ${
+                isIncreased ? "text-green-500" : isDecreased ? "text-red-500" : ""
+              }`}
+              style={{
+                animation: "fadeIn 0.3s ease-in"
+              }}
+            >
+              {isIncreased ? "▲" : isDecreased ? "▼" : ""}
+            </span>
+          )}
+        </div>
       </div>
       
       {showTooltip && ranking && (
-        <div className="absolute top-full left-0 mt-2 bg-[#1a1a1a] border border-[#C9A227] rounded-lg px-3 py-2 z-[99999] min-w-[200px] shadow-lg">
+        <div className="absolute top-full left-0 mt-2 bg-[#1a1a1a] border border-[#C9A227] rounded-lg px-3 py-2 z-[100002] min-w-[200px] shadow-lg">
           <p className="text-xs text-[#A89F91] mb-2 font-bold">{label} 랭킹</p>
           <div className="space-y-1.5">
             {ranking.map((item, index) => {
@@ -407,7 +430,10 @@ function MilitaryInfo({ selectedNation }: { selectedNation: NationType }) {
 
 export default function Home() {
   const searchParams = useSearchParams();
-  const nationFromUrl = searchParams.get("nation") as NationType;
+  const router = useRouter();
+  const routerRef = useRef(router);
+  routerRef.current = router; // Keep ref updated
+  const nationFromUrl = (searchParams.get("country") || searchParams.get("nation")) as NationType;
   
   const [selectedNation, setSelectedNation] = useState<NationType>(nationFromUrl);
   const [turn, setTurn] = useState(1);
@@ -445,6 +471,9 @@ export default function Home() {
   const [commandLogs, setCommandLogs] = useState<CommandLog[]>([]);
   const [financeIncrease, setFinanceIncrease] = useState(0);
   const prevFinanceRef = useRef(stats.finance);
+  const prevStatsRef = useRef<GameStats>({ ...stats });
+  const prevTurnRef = useRef(turn);
+  const [turnChanged, setTurnChanged] = useState(false);
   const bgmRef = useRef<HTMLAudioElement>(null);
   const [news, setNews] = useState<NewsItem[]>([
     {
@@ -510,7 +539,7 @@ export default function Home() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           user_input: command,
-          country_name: nationInfo[selectedNation].name
+          country_id: selectedNation
         }),
       });
 
@@ -531,13 +560,28 @@ export default function Home() {
       setCommandLogs((prev) => [...prev, newLog]);
 
       // 뉴스 업데이트
-      if (data.news && Array.isArray(data.news)) {
-        setNews(data.news.map((n: string, i: number) => ({
+      if (data.public_news && Array.isArray(data.public_news)) {
+        setNews(data.public_news.map((n: string, i: number): NewsItem => ({
           id: Date.now() + i,
           title: "조정 통보",
           content: n,
-          type: "event" as const,
+          type: "event",
         })));
+      }
+
+      // 턴 업데이트 확인 (스탯 업데이트 전에)
+      let newTurn = turn;
+      if (data.updated_stats && data.updated_stats.turn) {
+        newTurn = data.updated_stats.turn;
+      } else {
+        newTurn = turn + 1;
+      }
+      
+      // 턴이 변경되면 이전 stats 저장
+      const isTurnChanged = newTurn !== prevTurnRef.current;
+      if (isTurnChanged) {
+        prevStatsRef.current = { ...stats };
+        prevTurnRef.current = newTurn;
       }
 
       // 스탯 업데이트
@@ -559,7 +603,12 @@ export default function Home() {
         };
       });
 
-      setTurn((prev) => prev + 1);
+      // 턴 업데이트
+      if (data.updated_stats && data.updated_stats.turn) {
+        setTurn(data.updated_stats.turn);
+      } else {
+        setTurn((prev) => prev + 1);
+      }
     } catch (error) {
       console.error("API 호출 실패:", error);
       
@@ -588,11 +637,25 @@ export default function Home() {
     prevFinanceRef.current = stats.finance;
   }, [stats.finance]);
 
+  // 턴 변경 감지
+  useEffect(() => {
+    if (turn !== prevTurnRef.current) {
+      setTurnChanged(true);
+      prevTurnRef.current = turn;
+    }
+  }, [turn]);
+
   const totalScore =
     Math.floor(stats.finance / 100) +
     Math.floor(stats.population / 1000) +
     stats.happiness * 10 +
     Math.floor(stats.military / 10);
+
+  const prevTotalScore =
+    Math.floor(prevStatsRef.current.finance / 100) +
+    Math.floor(prevStatsRef.current.population / 1000) +
+    prevStatsRef.current.happiness * 10 +
+    Math.floor(prevStatsRef.current.military / 10);
 
   // 초기 로딩 방지
   const [mounted, setMounted] = useState(false);
@@ -606,11 +669,158 @@ export default function Home() {
     }
   }, []);
 
-  // URL에서 국가가 전달되면 자동으로 설정
+  // URL에서 국가가 전달되면 자동으로 설정 및 백엔드에서 데이터 로드
   useEffect(() => {
     if (nationFromUrl) {
       setSelectedNation(nationFromUrl);
+      
+      // 백엔드에서 국가 데이터 가져오기 (실패 시 알림 표시)
+      const loadCountryData = async () => {
+        let connectionFailed = false;
+        let errorMessage = "";
+        
+        try {
+          const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+          
+          // 타임아웃을 위한 AbortController
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 5000); // 5초 타임아웃
+          
+          try {
+            // 백엔드 상태 확인
+            const statusResponse = await fetch(`${apiUrl}/status`, {
+              method: 'GET',
+              signal: controller.signal,
+            });
+            
+            clearTimeout(timeoutId);
+            
+            if (!statusResponse.ok) {
+              connectionFailed = true;
+              errorMessage = "백엔드 서버가 응답하지 않습니다.";
+              throw new Error(errorMessage);
+            }
+            
+            // 국가 데이터 가져오기
+            const countryController = new AbortController();
+            const countryTimeoutId = setTimeout(() => countryController.abort(), 5000);
+            
+            try {
+              const response = await fetch(`${apiUrl}/api/country/${nationFromUrl}`, {
+                signal: countryController.signal,
+              });
+              
+              clearTimeout(countryTimeoutId);
+              
+              if (!response.ok) {
+                connectionFailed = true;
+                errorMessage = `국가 데이터를 가져올 수 없습니다. (${response.status})`;
+                throw new Error(errorMessage);
+              }
+              
+              const data = await response.json();
+              setStats({
+                finance: data.finance,
+                population: data.population,
+                happiness: data.happiness,
+                military: data.military,
+              });
+              if (data.turn) {
+                setTurn(data.turn);
+              }
+            } catch (countryError) {
+              clearTimeout(countryTimeoutId);
+              if (countryError instanceof Error) {
+                if (countryError.name === 'AbortError') {
+                  connectionFailed = true;
+                  errorMessage = "백엔드 서버 연결 시간이 초과되었습니다.";
+                } else {
+                  connectionFailed = true;
+                  errorMessage = countryError.message || "국가 데이터를 가져오는 중 오류가 발생했습니다.";
+                }
+                throw countryError;
+              }
+            }
+            
+            // 뉴스 데이터 가져오기
+            const newsController = new AbortController();
+            const newsTimeoutId = setTimeout(() => newsController.abort(), 5000);
+            
+            try {
+              const newsResponse = await fetch(`${apiUrl}/api/country/${nationFromUrl}/news`, {
+                signal: newsController.signal,
+              });
+              
+              clearTimeout(newsTimeoutId);
+              
+              if (newsResponse.ok) {
+                const newsData = await newsResponse.json();
+                if (Array.isArray(newsData) && newsData.length > 0) {
+                  setNews(newsData.slice(0, 3).map((n: any, i: number): NewsItem => {
+                    let newsType: "event" | "war" | "diplomacy" | "economy" = "event";
+                    if (n.type === "war") newsType = "war";
+                    else if (n.type === "diplomacy") newsType = "diplomacy";
+                    else if (n.type === "economy") newsType = "economy";
+                    
+                    return {
+                      id: n.id || Date.now() + i,
+                      title: n.title,
+                      content: n.content,
+                      type: newsType,
+                    };
+                  }));
+                }
+              }
+            } catch (newsError) {
+              clearTimeout(newsTimeoutId);
+              // 뉴스는 실패해도 계속 진행 (필수 데이터가 아니므로)
+              console.warn("뉴스 데이터 로드 실패:", newsError);
+            }
+          } catch (statusError) {
+            clearTimeout(timeoutId);
+            if (statusError instanceof Error) {
+              if (statusError.name === 'AbortError') {
+                connectionFailed = true;
+                errorMessage = "백엔드 서버 연결 시간이 초과되었습니다.";
+              } else if (!errorMessage) {
+                connectionFailed = true;
+                errorMessage = statusError.message || "백엔드 서버에 연결할 수 없습니다.";
+              }
+            } else {
+              connectionFailed = true;
+              errorMessage = "백엔드 서버에 연결할 수 없습니다.";
+            }
+            throw statusError;
+          }
+        } catch (error) {
+          // 예상치 못한 오류
+          if (!connectionFailed) {
+            connectionFailed = true;
+            if (error instanceof Error) {
+              errorMessage = error.message || "백엔드 서버에 연결할 수 없습니다.";
+            } else {
+              errorMessage = "백엔드 서버에 연결할 수 없습니다.";
+            }
+          }
+        }
+        
+        // 연결 실패 시 알림 표시 및 선택 페이지로 리다이렉트
+        if (connectionFailed) {
+          const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+          alert(
+            `백엔드 서버 연결 실패\n\n` +
+            `오류: ${errorMessage}\n\n` +
+            `백엔드 서버가 실행 중인지 확인하세요.\n` +
+            `서버 주소: ${apiUrl}\n\n` +
+            `확인을 누르면 국가 선택 페이지로 돌아갑니다.`
+          );
+          routerRef.current.push('/selection');
+        }
+      };
+      
+      loadCountryData();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nationFromUrl]);
 
   // BGM 자동 재생
@@ -700,6 +910,8 @@ export default function Home() {
               icon="💰" 
               label="재정" 
               value={stats.finance} 
+              prevValue={prevStatsRef.current.finance}
+              showArrow={turnChanged}
               prefix="$" 
               allNationStats={allNationStats}
               statType="finance"
@@ -709,6 +921,8 @@ export default function Home() {
               icon="👥" 
               label="인구" 
               value={stats.population}
+              prevValue={prevStatsRef.current.population}
+              showArrow={turnChanged}
               allNationStats={allNationStats}
               statType="population"
               selectedNation={selectedNation}
@@ -717,6 +931,8 @@ export default function Home() {
               icon="😊" 
               label="행복도" 
               value={stats.happiness} 
+              prevValue={prevStatsRef.current.happiness}
+              showArrow={turnChanged}
               suffix="%"
               allNationStats={allNationStats}
               statType="happiness"
@@ -726,6 +942,8 @@ export default function Home() {
               icon="⚔️" 
               label="군사력" 
               value={stats.military}
+              prevValue={prevStatsRef.current.military}
+              showArrow={turnChanged}
               allNationStats={allNationStats}
               statType="military"
               selectedNation={selectedNation}
@@ -734,6 +952,8 @@ export default function Home() {
               icon="🏆" 
               label="총합 점수" 
               value={totalScore}
+              prevValue={prevTotalScore}
+              showArrow={turnChanged}
               allNationStats={allNationStats}
               statType="totalScore"
               selectedNation={selectedNation}
@@ -818,9 +1038,6 @@ export default function Home() {
                           <span className="text-[#C9A227]">▶</span>
                           <span className="text-[#F5F5DC] font-medium">
                             {log.command}
-                          </span>
-                          <span className="text-[#6B6B6B] text-xs ml-auto">
-                            {log.timestamp.toLocaleTimeString()}
                           </span>
                         </div>
                         <p className="text-[#A89F91] text-sm ml-5">

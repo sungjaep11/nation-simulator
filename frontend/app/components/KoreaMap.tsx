@@ -247,7 +247,7 @@ const KoreaMap = memo(function KoreaMap({
   }
 
   return (
-    <div className="relative w-full h-full overflow-hidden z-0">
+    <div className="relative w-full h-full overflow-hidden">
       <ComposableMap
         projection="geoMercator"
         projectionConfig={{
@@ -373,7 +373,7 @@ const KoreaMap = memo(function KoreaMap({
         const score = owner !== "neutral" && nationScores?.[owner];
         
         return (
-          <div className="absolute top-2 left-2 bg-[#1a1a1a] border border-[#C9A227] rounded-lg px-3 py-2 text-sm animate-fade-in z-10">
+          <div className="absolute top-2 left-2 bg-[#1a1a1a] border border-[#C9A227] rounded-lg px-3 py-2 text-sm animate-fade-in z-[100001] pointer-events-none">
             <p className="font-bold text-[#F5F5DC]">{hoveredProvince}</p>
             <p className="text-xs">
               영유국: <span style={{ color: ownerColor }}>{ownerName}</span>
@@ -388,20 +388,20 @@ const KoreaMap = memo(function KoreaMap({
       })()}
 
       {/* 범례 */}
-      <div className="absolute bottom-2 right-2 bg-[#0d0d0d]/90 border border-[#C9A227]/30 rounded-lg p-3 z-10">
-        <p className="text-[10px] text-[#F5F5DC] font-bold mb-2 text-center">영토 현황</p>
-        <div className="space-y-1.5">
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: kingdomColors.goguryeo.default }} />
-            <span className="text-[10px] text-[#F5F5DC]">고구려</span>
+      <div className="absolute bottom-2 right-2 bg-[#0d0d0d]/90 border border-[#C9A227]/30 rounded-lg p-2 z-[100001]">
+        <p className="text-[9px] text-[#F5F5DC] font-bold mb-1.5 text-center">영토 현황</p>
+        <div className="space-y-1">
+          <div className="flex items-center gap-1.5">
+            <div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: kingdomColors.goguryeo.default }} />
+            <span className="text-[9px] text-[#F5F5DC]">고구려</span>
           </div>
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: kingdomColors.baekje.default }} />
-            <span className="text-[10px] text-[#F5F5DC]">백제</span>
+          <div className="flex items-center gap-1.5">
+            <div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: kingdomColors.baekje.default }} />
+            <span className="text-[9px] text-[#F5F5DC]">백제</span>
           </div>
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: kingdomColors.silla.default }} />
-            <span className="text-[10px] text-[#F5F5DC]">신라</span>
+          <div className="flex items-center gap-1.5">
+            <div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: kingdomColors.silla.default }} />
+            <span className="text-[9px] text-[#F5F5DC]">신라</span>
           </div>
         </div>
       </div>

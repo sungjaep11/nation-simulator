@@ -7,5 +7,5 @@ transformers>=4.40.0
 torch>=2.0.0
 accelerate>=0.20.0
 sqlmodel>=0.0.14
-google-genai
+google-generativeai
 python-dotenv
