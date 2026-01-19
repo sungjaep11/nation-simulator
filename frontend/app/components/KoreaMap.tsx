@@ -247,7 +247,7 @@ const KoreaMap = memo(function KoreaMap({
   }
 
   return (
-    <div className="relative w-full h-full overflow-hidden">
+    <div className="relative w-full h-full overflow-hidden z-0">
       <ComposableMap
         projection="geoMercator"
         projectionConfig={{

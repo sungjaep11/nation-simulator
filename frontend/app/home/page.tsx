@@ -240,7 +240,7 @@ function StatItem({
       </div>
       
       {showTooltip && ranking && (
-        <div className="absolute top-full left-0 mt-2 bg-[#1a1a1a] border border-[#C9A227] rounded-lg px-3 py-2 z-[9999] min-w-[200px] shadow-lg">
+        <div className="absolute top-full left-0 mt-2 bg-[#1a1a1a] border border-[#C9A227] rounded-lg px-3 py-2 z-[99999] min-w-[200px] shadow-lg">
           <p className="text-xs text-[#A89F91] mb-2 font-bold">{label} 랭킹</p>
           <div className="space-y-1.5">
             {ranking.map((item, index) => {
@@ -807,7 +807,7 @@ export default function Home() {
         <aside className="w-[320px] glass-panel border-l border-[#C9A227]/20 flex flex-col">
           {/* 중앙: 지도 */}
           <div className="flex-[2] p-4 border-b border-[#C9A227]/20 flex flex-col">
-            <div className="flex-1 glass-panel rounded-xl p-2 relative min-h-0">
+            <div className="flex-1 glass-panel rounded-xl p-2 relative min-h-0 z-0">
               <KoreaMap 
                 financeIncrease={financeIncrease} 
                 selectedNation={selectedNation}
