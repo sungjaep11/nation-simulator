@@ -594,9 +594,9 @@ const handleSelectCountry = (countryId: string) => {
                     padding: 'clamp(1rem, 2vw, 1.5rem)',
                     transform: 'scale(1.05)',
                     backgroundColor: 'rgba(26, 26, 26, 0.15)',
-                    borderColor: `${nation.color}80`,
+                    borderColor: `${country.color}80`,
                     borderWidth: '2px',
-                    boxShadow: `0 8px 32px 0 rgba(0, 0, 0, 0.37), 0 0 20px ${nation.color}40`,
+                    boxShadow: `0 8px 32px 0 rgba(0, 0, 0, 0.37), 0 0 20px ${country.color}40`,
                   } : {
                     padding: 'clamp(0.75rem, 1.5vw, 1rem)',
                     transform: 'scale(1)',
@@ -611,7 +611,7 @@ const handleSelectCountry = (countryId: string) => {
                     className="absolute inset-0 pointer-events-none"
                     style={{
                       background: isExpanded 
-                        ? `linear-gradient(135deg, ${nation.color}15 0%, transparent 100%)`
+                        ? `linear-gradient(135deg, ${country.color}15 0%, transparent 100%)`
                         : 'linear-gradient(135deg, rgba(255, 255, 255, 0.05) 0%, transparent 100%)',
                     }}
                   />
@@ -619,7 +619,7 @@ const handleSelectCountry = (countryId: string) => {
                     <div 
                       className="absolute top-4 right-4 rounded-full flex items-center justify-center z-10"
                       style={{ 
-                        backgroundColor: nation.color,
+                        backgroundColor: country.color,
                         width: 'clamp(1.25rem, 2vw, 1.5rem)',
                         height: 'clamp(1.25rem, 2vw, 1.5rem)',
                         fontSize: 'clamp(0.75rem, 1.5vw, 1rem)',
@@ -730,9 +730,9 @@ const handleSelectCountry = (countryId: string) => {
                     ? `${selectedCountryData?.name}로 시작하기`
                     : '국가를 선택해주세요'}
                 </button>
-              </div>
-            );
-          })()}
+              );
+            })()}
+        </div>
         </div>
       </div>
     </>
