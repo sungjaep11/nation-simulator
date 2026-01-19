@@ -370,7 +370,7 @@ const KoreaMap = memo(function KoreaMap({
         const owner = getOwner(hoveredProvince);
         const ownerName = getOwnerName(owner);
         const ownerColor = owner !== "neutral" ? kingdomColors[owner].default : "#A89F91";
-        const score = owner !== "neutral" && nationScores?.[owner];
+        const ownerScore = owner !== "neutral" ? nationScores?.[owner] : undefined;
         
         return (
           <div className="absolute top-2 left-2 bg-[#1a1a1a] border border-[#C9A227] rounded-lg px-3 py-2 text-sm animate-fade-in z-[100001] pointer-events-none">
@@ -378,9 +378,14 @@ const KoreaMap = memo(function KoreaMap({
             <p className="text-xs">
               영유국: <span style={{ color: ownerColor }}>{ownerName}</span>
             </p>
-            {score !== undefined && (
+            {ownerScore !== undefined && (
               <p className="text-xs mt-1">
-                총합 점수: <span className="text-[#C9A227] font-bold">{score.toLocaleString()}</span>
+                <span style={{ color: ownerColor }}>{ownerName}</span>
+                {" "}
+                점수:{" "}
+                <span className="text-[#C9A227] font-bold">
+                  {ownerScore.toLocaleString()}
+                </span>
               </p>
             )}
           </div>

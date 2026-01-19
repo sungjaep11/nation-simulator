@@ -79,7 +79,7 @@ async def get_gemini_game_data(user_input: str, current_stats: dict, all_countri
         """
         
         # 텍스트 생성 요청
-        model = genai.GenerativeModel('gemini-1.5-flash')  # type: ignore
+        model = genai.GenerativeModel('gemini-2.5-flash')  # type: ignore
         response = model.generate_content(prompt)
         
         # JSON 문자열 추출 및 파싱
@@ -148,7 +148,7 @@ async def get_ai_country_turn(country_stats: dict, all_countries: dict) -> dict:
         """
         
         # 텍스트 생성 요청
-        model = genai.GenerativeModel('gemini-1.5-flash')  # type: ignore
+        model = genai.GenerativeModel('gemini-2.5-flash')  # type: ignore
         response = model.generate_content(prompt)
         
         clean_json = response.text.replace('```json', '').replace('```', '').strip()

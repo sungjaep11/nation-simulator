@@ -8,6 +8,10 @@ import Character3D from "../components/Character3D";
 
 // 국가 타입 정의
 type NationType = "goguryeo" | "baekje" | "silla" | null;
+type NationId = Exclude<NationType, null>;
+const NATION_IDS = ["goguryeo", "baekje", "silla"] as const;
+const isNationId = (value: unknown): value is NationId =>
+  NATION_IDS.includes(value as NationId);
 
 interface GameStats {
   finance: number;
@@ -177,6 +181,7 @@ function StatItem({
   prefix = "",
   suffix = "",
   allNationStats,
+  allNationScores,
   statType,
   selectedNation,
   turn,
@@ -189,6 +194,11 @@ function StatItem({
   prefix?: string;
   suffix?: string;
   allNationStats?: NationStats;
+  allNationScores?: {
+    goguryeo?: number;
+    baekje?: number;
+    silla?: number;
+  };
   statType?: "finance" | "population" | "happiness" | "military" | "totalScore" | "turn";
   selectedNation?: NationType;
   turn?: number;
@@ -203,26 +213,34 @@ function StatItem({
   const getRankingData = () => {
     if (!allNationStats || !statType || statType === "turn") return null;
 
+    const scores = allNationScores || {};
+
     const nationData = [
       { nation: "고구려", value: statType === "totalScore" 
-        ? Math.floor(allNationStats.goguryeo.finance / 100) +
-          Math.floor(allNationStats.goguryeo.population / 1000) +
-          allNationStats.goguryeo.happiness * 10 +
-          Math.floor(allNationStats.goguryeo.military / 10)
+        ? (scores.goguryeo ?? (
+            Math.floor(allNationStats.goguryeo.finance / 100) +
+            Math.floor(allNationStats.goguryeo.population / 1000) +
+            allNationStats.goguryeo.happiness * 10 +
+            allNationStats.goguryeo.military * 100
+          ))
         : allNationStats.goguryeo[statType],
         type: "goguryeo" as const },
       { nation: "백제", value: statType === "totalScore"
-        ? Math.floor(allNationStats.baekje.finance / 100) +
-          Math.floor(allNationStats.baekje.population / 1000) +
-          allNationStats.baekje.happiness * 10 +
-          Math.floor(allNationStats.baekje.military / 10)
+        ? (scores.baekje ?? (
+            Math.floor(allNationStats.baekje.finance / 100) +
+            Math.floor(allNationStats.baekje.population / 1000) +
+            allNationStats.baekje.happiness * 10 +
+            allNationStats.baekje.military * 100
+          ))
         : allNationStats.baekje[statType],
         type: "baekje" as const },
       { nation: "신라", value: statType === "totalScore"
-        ? Math.floor(allNationStats.silla.finance / 100) +
-          Math.floor(allNationStats.silla.population / 1000) +
-          allNationStats.silla.happiness * 10 +
-          Math.floor(allNationStats.silla.military / 10)
+        ? (scores.silla ?? (
+            Math.floor(allNationStats.silla.finance / 100) +
+            Math.floor(allNationStats.silla.population / 1000) +
+            allNationStats.silla.happiness * 10 +
+            allNationStats.silla.military * 100
+          ))
         : allNationStats.silla[statType],
         type: "silla" as const },
     ];
@@ -234,9 +252,10 @@ function StatItem({
 
   return (
     <div 
-      className="relative flex items-center gap-2 px-4 py-2 glass-panel rounded-lg hover:border-[#C9A227]/50 transition-all duration-300"
+      className="relative flex items-center gap-2 px-4 py-2 glass-panel rounded-lg hover:border-[#C9A227]/50 transition-all duration-300 hover:z-[999999]"
       onMouseEnter={() => setShowTooltip(true)}
       onMouseLeave={() => setShowTooltip(false)}
+      style={{ zIndex: showTooltip ? 999999 : 'auto' }}
     >
       <span className="text-xl">{icon}</span>
       <div className="flex flex-col">
@@ -263,7 +282,7 @@ function StatItem({
       </div>
       
       {showTooltip && ranking && (
-        <div className="absolute top-full left-0 mt-2 bg-[#1a1a1a] border border-[#C9A227] rounded-lg px-3 py-2 z-[100002] min-w-[200px] shadow-lg">
+        <div className="absolute top-full left-0 mt-2 bg-[#1a1a1a] border border-[#C9A227] rounded-lg px-3 py-2 min-w-[200px] shadow-lg" style={{ zIndex: 999999 }}>
           <p className="text-xs text-[#A89F91] mb-2 font-bold">{label} 랭킹</p>
           <div className="space-y-1.5">
             {ranking.map((item, index) => {
@@ -475,6 +494,12 @@ export default function Home() {
   const prevTurnRef = useRef(turn);
   const [turnChanged, setTurnChanged] = useState(false);
   const bgmRef = useRef<HTMLAudioElement>(null);
+  const [allNationScores, setAllNationScores] = useState<{
+    goguryeo?: number;
+    baekje?: number;
+    silla?: number;
+  }>({});
+  const [currentTotalScore, setCurrentTotalScore] = useState<number>(0);
   const [news, setNews] = useState<NewsItem[]>([
     {
       id: 1,
@@ -595,6 +620,11 @@ export default function Home() {
           setTimeout(() => setFinanceIncrease(0), 3000);
         }
         
+        // 백엔드에서 받은 totalScore 저장
+        if (newStats.totalScore !== undefined) {
+          setCurrentTotalScore(newStats.totalScore);
+        }
+        
         return {
           finance: newStats.finance,
           population: newStats.population,
@@ -608,6 +638,27 @@ export default function Home() {
         setTurn(data.updated_stats.turn);
       } else {
         setTurn((prev) => prev + 1);
+      }
+      
+      // 모든 국가의 점수 업데이트
+      try {
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+        const countriesResponse = await fetch(`${apiUrl}/api/countries`);
+        if (countriesResponse.ok) {
+          const countriesData = (await countriesResponse.json()) as Array<{
+            id?: unknown;
+            totalScore?: number;
+          }>;
+          const scores: Partial<Record<NationId, number>> = {};
+          countriesData.forEach((country) => {
+            if (isNationId(country.id)) {
+              scores[country.id] = country.totalScore;
+            }
+          });
+          setAllNationScores(scores);
+        }
+      } catch (scoresError) {
+        console.warn("국가 점수 업데이트 실패:", scoresError);
       }
     } catch (error) {
       console.error("API 호출 실패:", error);
@@ -645,17 +696,20 @@ export default function Home() {
     }
   }, [turn]);
 
-  const totalScore =
+  // 백엔드에서 받은 totalScore 사용 (없으면 계산)
+  const totalScore = currentTotalScore || (
     Math.floor(stats.finance / 100) +
     Math.floor(stats.population / 1000) +
     stats.happiness * 10 +
-    Math.floor(stats.military / 10);
+    stats.military * 100
+  );
 
-  const prevTotalScore =
-    Math.floor(prevStatsRef.current.finance / 100) +
-    Math.floor(prevStatsRef.current.population / 1000) +
-    prevStatsRef.current.happiness * 10 +
-    Math.floor(prevStatsRef.current.military / 10);
+  const prevTotalScoreRef = useRef(totalScore);
+  const prevTotalScore = prevTotalScoreRef.current;
+  
+  useEffect(() => {
+    prevTotalScoreRef.current = totalScore;
+  }, [totalScore]);
 
   // 초기 로딩 방지
   const [mounted, setMounted] = useState(false);
@@ -727,6 +781,32 @@ export default function Home() {
               });
               if (data.turn) {
                 setTurn(data.turn);
+              }
+              if (data.totalScore !== undefined) {
+                setCurrentTotalScore(data.totalScore);
+              }
+              
+              // 모든 국가의 점수 가져오기
+              try {
+                const countriesResponse = await fetch(`${apiUrl}/api/countries`, {
+                  signal: countryController.signal,
+                });
+                if (countriesResponse.ok) {
+                  const countriesData = (await countriesResponse.json()) as Array<{
+                    id?: unknown;
+                    totalScore?: number;
+                  }>;
+                  const scores: Partial<Record<NationId, number>> = {};
+                  countriesData.forEach((country) => {
+                    if (isNationId(country.id)) {
+                      scores[country.id] = country.totalScore;
+                    }
+                  });
+                  setAllNationScores(scores);
+                }
+              } catch (scoresError) {
+                // 점수 로드 실패해도 계속 진행
+                console.warn("국가 점수 로드 실패:", scoresError);
               }
             } catch (countryError) {
               clearTimeout(countryTimeoutId);
@@ -879,7 +959,7 @@ export default function Home() {
         <div className="absolute inset-0 bg-[#0d0d0d]/60"></div>
         <div className="relative z-10 flex flex-col h-screen">
       {/* ① 상단 헤더 (Status Bar) */}
-      <header className="w-full glass-panel border-b border-[#C9A227]/30 px-6 py-3 flex-shrink-0">
+      <header className="w-full glass-panel border-b border-[#C9A227]/30 px-6 py-3 flex-shrink-0 relative z-50">
         <div className="max-w-[1850px] mx-auto flex items-center justify-between">
           {/* 국가 정보 */}
           <div className="flex items-center gap-4">
@@ -914,6 +994,7 @@ export default function Home() {
               showArrow={turnChanged}
               prefix="$" 
               allNationStats={allNationStats}
+              allNationScores={allNationScores}
               statType="finance"
               selectedNation={selectedNation}
             />
@@ -924,6 +1005,7 @@ export default function Home() {
               prevValue={prevStatsRef.current.population}
               showArrow={turnChanged}
               allNationStats={allNationStats}
+              allNationScores={allNationScores}
               statType="population"
               selectedNation={selectedNation}
             />
@@ -935,6 +1017,7 @@ export default function Home() {
               showArrow={turnChanged}
               suffix="%"
               allNationStats={allNationStats}
+              allNationScores={allNationScores}
               statType="happiness"
               selectedNation={selectedNation}
             />
@@ -945,6 +1028,7 @@ export default function Home() {
               prevValue={prevStatsRef.current.military}
               showArrow={turnChanged}
               allNationStats={allNationStats}
+              allNationScores={allNationScores}
               statType="military"
               selectedNation={selectedNation}
             />
@@ -955,6 +1039,7 @@ export default function Home() {
               prevValue={prevTotalScore}
               showArrow={turnChanged}
               allNationStats={allNationStats}
+              allNationScores={allNationScores}
               statType="totalScore"
               selectedNation={selectedNation}
             />
@@ -963,6 +1048,7 @@ export default function Home() {
               label="현재 턴" 
               value={turn}
               allNationStats={allNationStats}
+              allNationScores={allNationScores}
               statType="turn"
               selectedNation={selectedNation}
               turn={turn}
@@ -1052,16 +1138,14 @@ export default function Home() {
       </main>
 
         {/* ② 우측 패널 (Navigation & Info) */}
-        <aside className="w-[320px] glass-panel border-l border-[#C9A227]/20 flex flex-col">
+        <aside className="w-[320px] glass-panel border-l border-[#C9A227]/20 flex flex-col relative z-40">
           {/* 중앙: 지도 */}
           <div className="flex-[2] p-4 border-b border-[#C9A227]/20 flex flex-col">
             <div className="flex-1 glass-panel rounded-xl p-2 relative min-h-0 z-0">
               <KoreaMap 
                 financeIncrease={financeIncrease} 
                 selectedNation={selectedNation}
-                nationScores={{
-                  [selectedNation || "goguryeo"]: totalScore,
-                }}
+                nationScores={allNationScores}
               />
             </div>
           </div>
