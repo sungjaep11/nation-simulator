@@ -963,7 +963,10 @@ export default function Home() {
         <div className="max-w-[1850px] mx-auto flex items-center justify-between">
           {/* 국가 정보 */}
           <div className="flex items-center gap-4">
-            <div className="relative w-12 h-12">
+            <div 
+              className="relative w-12 h-12 cursor-pointer hover:opacity-80 transition-opacity"
+              onClick={() => router.push("/login")}
+            >
               <Image
                 src="/logo.png"
                 alt="Logo"
