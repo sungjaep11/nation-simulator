@@ -1,0 +1,25 @@
+import sqlite3
+
+def init_db():
+    conn = sqlite3.connect('game.db')
+    cursor = conn.cursor()
+
+    # 1. 테이블 생성
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY,
+            username TEXT,
+            score INTEGER
+        )
+    ''')
+
+    # 2. 초기 데이터 삽입 (필요한 경우)
+    sample_data = [('player1', 100), ('player2', 200)]
+    cursor.executemany('INSERT INTO users (username, score) VALUES (?, ?)', sample_data)
+
+    conn.commit()
+    conn.close()
+    print("Database initialized successfully!")
+
+if __name__ == "__main__":
+    init_db()
