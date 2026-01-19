@@ -1,5 +1,6 @@
 import os
 import json
+from typing import Optional
 import google.generativeai as genai
 from dotenv import load_dotenv
 
@@ -29,7 +30,7 @@ def _get_mock_response(user_input: str, current_stats: dict) -> dict:
         "actions": []
     }
 
-async def get_gemini_game_data(user_input: str, current_stats: dict, all_countries: dict = None):
+async def get_gemini_game_data(user_input: str, current_stats: dict, all_countries: Optional[dict] = None):
     """
     Gemini를 통해 시나리오, 뉴스, 스탯 변화 및 액션을 JSON으로 생성합니다.
     
@@ -43,11 +44,30 @@ async def get_gemini_game_data(user_input: str, current_stats: dict, all_countri
         
         other_countries_info = ""
         if all_countries:
-            other_countries_info = f"\n[다른 국가들 현황] {json.dumps(all_countries, ensure_ascii=False)}"
+            # 다른 국가들의 외교 및 군사 정보도 포함
+            other_countries_with_info = {}
+            for country_id, country_data in all_countries.items():
+                other_countries_with_info[country_id] = {
+                    k: v for k, v in country_data.items() 
+                    if k not in ['diplomacy', 'military_units']
+                }
+                if "diplomacy" in country_data:
+                    other_countries_with_info[country_id]["diplomacy"] = country_data["diplomacy"]
+                if "military_units" in country_data:
+                    other_countries_with_info[country_id]["military_units"] = country_data["military_units"]
+            other_countries_info = f"\n[다른 국가들 현황] {json.dumps(other_countries_with_info, ensure_ascii=False)}"
+        
+        # 외교 및 군사 정보 추출
+        diplomacy_info = ""
+        military_info = ""
+        if "diplomacy" in current_stats and current_stats["diplomacy"]:
+            diplomacy_info = f"\n[현재 외교 관계] {json.dumps(current_stats['diplomacy'], ensure_ascii=False)}"
+        if "military_units" in current_stats and current_stats["military_units"]:
+            military_info = f"\n[현재 군사 유닛] {json.dumps(current_stats['military_units'], ensure_ascii=False)}"
         
         prompt = f"""
 당신은 삼국시대 게임의 시스템 AI입니다. 유저의 명령을 분석해 다음을 JSON으로만 응답하세요.
-[현재 국가 스탯] {json.dumps(current_stats, ensure_ascii=False)}{other_countries_info}
+[현재 국가 스탯] {json.dumps({k: v for k, v in current_stats.items() if k not in ['diplomacy', 'military_units']}, ensure_ascii=False)}{diplomacy_info}{military_info}{other_countries_info}
 [유저 명령] "{user_input}"
 
 뉴스 분류:
@@ -115,12 +135,32 @@ async def get_ai_country_turn(country_stats: dict, all_countries: dict) -> dict:
     try:
         _get_api_key()  # Ensure API key is configured
         
+        # 외교 및 군사 정보 추출
+        diplomacy_info = ""
+        military_info = ""
+        if "diplomacy" in country_stats and country_stats["diplomacy"]:
+            diplomacy_info = f"\n[내 외교 관계] {json.dumps(country_stats['diplomacy'], ensure_ascii=False)}"
+        if "military_units" in country_stats and country_stats["military_units"]:
+            military_info = f"\n[내 군사 유닛] {json.dumps(country_stats['military_units'], ensure_ascii=False)}"
+        
+        # 다른 국가들의 외교 및 군사 정보도 포함
+        other_countries_with_info = {}
+        for country_id, country_data in all_countries.items():
+            other_countries_with_info[country_id] = {
+                k: v for k, v in country_data.items() 
+                if k not in ['diplomacy', 'military_units']
+            }
+            if "diplomacy" in country_data:
+                other_countries_with_info[country_id]["diplomacy"] = country_data["diplomacy"]
+            if "military_units" in country_data:
+                other_countries_with_info[country_id]["military_units"] = country_data["military_units"]
+        
         prompt = f"""
 당신은 삼국시대 게임에서 "{country_stats['name']}" 국가를 운영하는 AI입니다.
 현재 상황을 분석하고 이번 턴의 행동을 결정하세요.
 
-[내 국가 스탯] {json.dumps(country_stats, ensure_ascii=False)}
-[다른 국가들] {json.dumps(all_countries, ensure_ascii=False)}
+[내 국가 스탯] {json.dumps({k: v for k, v in country_stats.items() if k not in ['diplomacy', 'military_units']}, ensure_ascii=False)}{diplomacy_info}{military_info}
+[다른 국가들] {json.dumps(other_countries_with_info, ensure_ascii=False)}
 
 국가의 특성과 현재 상황에 맞는 전략적 행동을 선택하세요:
 - 경제가 부족하면 재정 확보

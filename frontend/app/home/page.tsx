@@ -494,6 +494,7 @@ export default function Home() {
   const prevTurnRef = useRef(turn);
   const [turnChanged, setTurnChanged] = useState(false);
   const bgmRef = useRef<HTMLAudioElement>(null);
+  const sendSoundRef = useRef<HTMLAudioElement>(null);
   const [allNationScores, setAllNationScores] = useState<{
     goguryeo?: number;
     baekje?: number;
@@ -551,6 +552,14 @@ export default function Home() {
 
   const handleCommand = useCallback(async () => {
     if (!commandInput.trim() || isLoading || !selectedNation) return;
+
+    // 명령 전송 사운드 재생
+    if (sendSoundRef.current) {
+      sendSoundRef.current.currentTime = 0;
+      sendSoundRef.current.play().catch((error) => {
+        console.log("사운드 재생 실패:", error);
+      });
+    }
 
     setIsLoading(true);
     const command = commandInput;
@@ -943,6 +952,12 @@ export default function Home() {
         ref={bgmRef}
         src="/bgm.mp3"
         loop
+        preload="auto"
+        style={{ display: 'none' }}
+      />
+      <audio
+        ref={sendSoundRef}
+        src="/home/send.mp3"
         preload="auto"
         style={{ display: 'none' }}
       />
