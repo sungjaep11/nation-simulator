@@ -39,6 +39,7 @@ interface CommandLog {
   response: string;
   timestamp: Date;
   isLoading?: boolean;
+  loadingMessageIndex?: number;
 }
 
 // 슬롯머신 단일 자릿수 컴포넌트
@@ -490,6 +491,35 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
   const [commandLogs, setCommandLogs] = useState<CommandLog[]>([]);
   const [financeIncrease, setFinanceIncrease] = useState(0);
+  
+  // 재치있는 로딩 메시지들
+  const loadingMessages = [
+    "군주의 지혜를 모으는 중...",
+    "신하들이 명령을 해석하는 중...",
+    "천하의 기운이 움직이는 중...",
+  ];
+  
+  // 로딩 중인 카드들의 메시지를 3초마다 순환
+  useEffect(() => {
+    const loadingLogs = commandLogs.filter(log => log.isLoading);
+    if (loadingLogs.length === 0) return;
+    
+    const interval = setInterval(() => {
+      setCommandLogs((prev) =>
+        prev.map((log) => {
+          if (log.isLoading && log.loadingMessageIndex !== undefined) {
+            return {
+              ...log,
+              loadingMessageIndex: ((log.loadingMessageIndex ?? 0) + 1) % loadingMessages.length,
+            };
+          }
+          return log;
+        })
+      );
+    }, 3000);
+    
+    return () => clearInterval(interval);
+  }, [commandLogs, loadingMessages.length]);
   const prevFinanceRef = useRef(stats.finance);
   const prevStatsRef = useRef<GameStats>({ ...stats });
   const prevTurnRef = useRef(turn);
@@ -574,6 +604,7 @@ export default function Home() {
       response: "",
       timestamp: new Date(),
       isLoading: true,
+      loadingMessageIndex: 0,
     };
     setCommandLogs((prev) => [...prev, loadingLog]);
 
@@ -1166,7 +1197,7 @@ export default function Home() {
                           <div className="flex items-center gap-2 ml-5 mt-2">
                             <div className="loading-spinner" style={{ width: "16px", height: "16px" }}></div>
                             <p className="text-[#A89F91] text-sm italic">
-                              {selectedNation && nationInfo[selectedNation].name}가 명령 하달 중...
+                              {loadingMessages[log.loadingMessageIndex ?? 0]}
                             </p>
                           </div>
                         ) : (
