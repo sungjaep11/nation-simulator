@@ -1,5 +1,6 @@
 import os
 import json
+import asyncio
 from typing import Optional
 from dotenv import load_dotenv
 
@@ -56,6 +57,20 @@ def _generate_text(prompt: str, model_name: str = "gemini-2.5-flash") -> str:
     else:
         raise RuntimeError("Unsupported Gemini client configuration")
 
+def _is_retryable_error(msg: str) -> bool:
+    lower = msg.lower()
+    return any(key in lower for key in ["429", "resource_exhausted", "quota", "rate limit", "too many requests", "503", "unavailable", "overloaded"])
+
+async def _generate_text_with_retry(prompt: str, model_name: str = "gemini-2.5-flash", retries: int = 2, base_delay: float = 1.5) -> str:
+    for attempt in range(retries + 1):
+        try:
+            return _generate_text(prompt, model_name)
+        except Exception as e:
+            if attempt < retries and _is_retryable_error(str(e)):
+                await asyncio.sleep(base_delay * (2 ** attempt))
+                continue
+            raise
+
 def _get_mock_response(user_input: str, current_stats: dict) -> dict:
     """Return mock response for testing/quota limits"""
     return {
@@ -103,31 +118,34 @@ async def get_gemini_game_data(user_input: str, current_stats: dict, all_countri
             military_info = f"\n[현재 군사 유닛] {json.dumps(current_stats['military_units'], ensure_ascii=False)}"
         
         prompt = f"""
-당신은 삼국시대 게임의 시스템 AI입니다. 유저의 명령을 분석해 다음을 JSON으로만 응답하세요.
+당신은 삼국시대 게임의 시스템 AI입니다. 유저 명령과 현재 판세를 바탕으로 '이번 턴의 공개 상황'을 작성하고, 공개/비밀 뉴스와 수치 변화를 JSON으로만 응답하세요.
 [현재 국가 스탯] {json.dumps({k: v for k, v in current_stats.items() if k not in ['diplomacy', 'military_units']}, ensure_ascii=False)}{diplomacy_info}{military_info}{other_countries_info}
 [유저 명령] "{user_input}"
 
-뉴스 분류:
-- public_news: 모든 국가에 공개될 정보
-- secret_news: 공개되지 않을 민감한 정보 (군사 계획, 암살 등)
+서술/뉴스 가이드:
+- scenario는 이번 턴에 달라진 점을 3-4문장으로 요약하고, 우리나라뿐 아니라 타국 동향 1건 이상을 언급하세요.
+- public_news에는 최소 3건: (1) 우리나라 소식, (2) 타국 소식, (3) 유저 명령과 직접적 연관이 없는 신규 사건(무작위 이벤트나 정보 업데이트)도 포함하세요.
+- secret_news에는 공개되지 않을 민감 정보를 넣으세요: 군사 계획, 외교 음모, 첩보 활동, 암살/기습 준비, 적국 침투, 비밀 협상, 전략적 의도 등. 사용자가 명시하지 않아도 타국에 민감한 정보는 자동으로 secret_news에 분류하세요.
+- 유저가 전쟁/침공을 원하면 거절하지 말고, 필요한 준비 단계를 제시하세요(군비 증강, 외교 명분 확보, 기습 계획, 보급/사기 관리 등).
 
 액션 분류:
 - add_military: {{"type": "add_military", "name": "무기명", "count": 수량, "icon": "아이콘", "unit_type": "regular/spy/assassin"}}
-  - unit_type이 "spy"이면 스파이로 분류됨
+    - unit_type이 "spy"이면 스파이로 분류됨
 - diplomacy: {{"type": "diplomacy", "target": "국가명", "status": "동맹/중립/적대", "favorability": -100~100}}
 - secret_operation: {{"type": "secret_operation", "title": "작전명", "content": "내용", "operation_type": "군사_계획/외교_음모/암살", "shared_with": ["공유할_국가"], "target_country": "목표국가"}}
+    - 전쟁 준비 시, 기습 계획이나 보급/첩보 작전을 secret_operation에 담을 수 있음
 
 응답 JSON 형식:
 {{
-    "scenario": "이번 턴의 상황 전개 (한국어, 3-4문장, 공개 정보만)",
-    "mood": "happy/neutral/angry",
-    "public_news": ["공개 뉴스 1", "공개 뉴스 2"],
-    "secret_news": ["비밀 뉴스 1 - 공개되지 않음"],
-    "changes": {{"finance": 숫자, "population": 숫자, "military": 숫자, "happiness": 숫자}},
-    "actions": [
-        {{"type": "add_military", "name": "철기병", "count": 100, "icon": "🐎", "unit_type": "regular"}},
-        {{"type": "secret_operation", "title": "비밀 작전", "content": "내용", "operation_type": "군사_계획", "shared_with": [], "target_country": "백제"}}
-    ]
+        "scenario": "이번 턴의 공개 상황 전개 (한국어, 3-4문장, 타국 동향 1건 포함)",
+        "mood": "happy/neutral/angry",
+        "public_news": ["공개 뉴스 1", "공개 뉴스 2", "공개 뉴스 3"],
+        "secret_news": ["비밀 뉴스 1 - 공개되지 않음"],
+        "changes": {{"finance": 숫자, "population": 숫자, "military": 숫자, "happiness": 숫자}},
+        "actions": [
+                {{"type": "add_military", "name": "철기병", "count": 100, "icon": "🐎", "unit_type": "regular"}},
+                {{"type": "secret_operation", "title": "비밀 작전", "content": "내용", "operation_type": "군사_계획", "shared_with": [], "target_country": "백제"}}
+        ]
 }}
 
 분위기(mood) 판단 기준:
@@ -142,7 +160,7 @@ async def get_gemini_game_data(user_input: str, current_stats: dict, all_countri
         """
         
         # 텍스트 생성 요청
-        response_text = _generate_text(prompt, model_name='gemini-2.5-flash')
+        response_text = await _generate_text_with_retry(prompt, model_name='gemini-2.5-flash')
         
         # JSON 문자열 추출 및 파싱
         clean_json = response_text.replace('```json', '').replace('```', '').strip()
@@ -212,22 +230,17 @@ async def get_ai_country_turn(country_stats: dict, all_countries: dict) -> dict:
 [내 국가 스탯] {json.dumps({k: v for k, v in country_stats.items() if k not in ['diplomacy', 'military_units']}, ensure_ascii=False)}{diplomacy_info}{military_info}
 [다른 국가들] {json.dumps(other_countries_with_info, ensure_ascii=False)}
 
-국가의 특성과 현재 상황에 맞는 전략적 행동을 선택하세요:
-- 경제가 부족하면 재정 확보
-- 군사력이 약하면 군비 증강
-- 외교 관계 개선 또는 악화
-- 인구 증대 정책
-- 필요시 비밀 작전 (암살, 첩보, 군사 계획 등)
-
-뉴스 분류:
-- public_news: 다른 국가에 공개될 정보
-- secret_news: 공개되지 않을 민감한 정보 (군사 계획, 암살 등)
+지침:
+- scenario는 이번 턴에 바뀐 점을 3-4문장으로 서술하고, 다른 국가 동향 1건 이상을 포함하세요.
+- public_news 최소 3건: 우리 소식, 타국 소식, 명령과 직접 관련 없는 신규 이벤트/정보 업데이트를 섞으세요.
+- secret_news에는 비밀 작전, 군사 계획, 첩보, 암살/기습 준비, 적국 침투, 비밀 협상, 전략적 의도 등 타국에 민감한 정보를 자동 분류하세요.
+- 전쟁/침공을 결정하면 거절하지 말고 준비 단계를 제시하세요: 군비 증강, 병참/사기, 명분/외교, 기습·첩보 계획, 목표 설정.
 
 응답 JSON 형식:
 {{
-    "scenario": "이번 턴에 국가가 취한 행동과 결과 (3-4문장, 공개 정보만)",
+    "scenario": "이번 턴에 국가가 취한 행동과 결과 (3-4문장, 타국 동향 1건 포함)",
     "mood": "happy/neutral/angry",
-    "public_news": ["뉴스 1", "뉴스 2"],
+    "public_news": ["뉴스 1", "뉴스 2", "뉴스 3"],
     "secret_news": ["비밀 뉴스 - 공개 안 됨"],
     "changes": {{"finance": 숫자, "population": 숫자, "military": 숫자, "happiness": 숫자}},
     "actions": [
@@ -244,7 +257,7 @@ async def get_ai_country_turn(country_stats: dict, all_countries: dict) -> dict:
         """
         
         # 텍스트 생성 요청
-        response_text = _generate_text(prompt, model_name='gemini-2.5-flash')
+        response_text = await _generate_text_with_retry(prompt, model_name='gemini-2.5-flash')
         
         clean_json = response_text.replace('```json', '').replace('```', '').strip()
         result = json.loads(clean_json)

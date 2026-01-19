@@ -33,6 +33,24 @@ interface NewsItem {
   type: "event" | "war" | "diplomacy" | "economy";
 }
 
+const categorizeNewsType = (text: string): NewsItem["type"] => {
+  const lower = text.toLowerCase();
+  const war = ["전쟁", "전투", "군사", "병력", "전황", "침공", "기습", "무력", "포격", "전선"];
+  const dip = ["외교", "동맹", "조약", "협상", "국교", "휴전", "회담", "사절", "우호"];
+  const eco = ["재정", "경제", "무역", "금", "세금", "수입", "지출", "시장", "곡물", "상업", "물가"];
+  if (war.some(k => lower.includes(k))) return "war";
+  if (dip.some(k => lower.includes(k))) return "diplomacy";
+  if (eco.some(k => lower.includes(k))) return "economy";
+  return "event";
+};
+
+const newsTitleByType: Record<NewsItem["type"], string> = {
+  war: "전황 보고",
+  diplomacy: "외교 보고",
+  economy: "경제 보고",
+  event: "국내 소식",
+};
+
 interface CommandLog {
   id: number;
   command: string;
@@ -639,6 +657,7 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
   const [commandLogs, setCommandLogs] = useState<CommandLog[]>([]);
   const [financeIncrease, setFinanceIncrease] = useState(0);
+  const [currentSituation, setCurrentSituation] = useState<string>("");
   
   // 재치있는 로딩 메시지들
   const loadingMessages = [
@@ -779,11 +798,15 @@ export default function Home() {
 
       const data = await response.json();
 
-      // 로딩 카드를 실제 응답으로 교체
+      const secretText = Array.isArray(data.secret_news)
+        ? data.secret_news.join("\n")
+        : (data.secret_news || "");
+
+      // 로딩 카드를 실제 응답으로 교체 (비밀 뉴스 우선)
       const newLog: CommandLog = {
         id: loadingLogId,
         command,
-        response: data.scenario,
+        response: secretText || data.scenario,
         timestamp: new Date(),
         isLoading: false,
       };
@@ -792,14 +815,32 @@ export default function Home() {
         prev.map((log) => log.id === loadingLogId ? newLog : log)
       );
 
+      // 현재 상황 업데이트
+      if (data.scenario) {
+        setCurrentSituation(data.scenario);
+      }
+
       // 뉴스 업데이트
-      if (data.public_news && Array.isArray(data.public_news)) {
-        setNews(data.public_news.map((n: string, i: number): NewsItem => ({
-          id: Date.now() + i,
-          title: "조정 통보",
-          content: n,
-          type: "event",
-        })));
+      if (data.public_news_items && Array.isArray(data.public_news_items)) {
+        setNews(data.public_news_items.map((n: any, i: number): NewsItem => {
+          const newsType: NewsItem["type"] = (n.type === "war" || n.type === "diplomacy" || n.type === "economy") ? n.type : "event";
+          return {
+            id: Date.now() + i,
+            title: n.title || newsTitleByType[newsType],
+            content: n.content ?? n,
+            type: newsType,
+          };
+        }));
+      } else if (data.public_news && Array.isArray(data.public_news)) {
+        setNews(data.public_news.map((n: string, i: number): NewsItem => {
+          const newsType = categorizeNewsType(n);
+          return {
+            id: Date.now() + i,
+            title: newsTitleByType[newsType],
+            content: n,
+            type: newsType,
+          };
+        }));
       }
 
       // 턴 업데이트 확인 (스탯 업데이트 전에)
@@ -1076,18 +1117,19 @@ export default function Home() {
                 const newsData = await newsResponse.json();
                 if (Array.isArray(newsData) && newsData.length > 0) {
                   setNews(newsData.slice(0, 3).map((n: any, i: number): NewsItem => {
-                    let newsType: "event" | "war" | "diplomacy" | "economy" = "event";
-                    if (n.type === "war") newsType = "war";
-                    else if (n.type === "diplomacy") newsType = "diplomacy";
-                    else if (n.type === "economy") newsType = "economy";
-                    
-                    return {
-                      id: n.id || Date.now() + i,
-                      title: n.title,
-                      content: n.content,
-                      type: newsType,
-                    };
-                  }));
+                        let newsType: "event" | "war" | "diplomacy" | "economy" = "event";
+                        if (n.type === "war") newsType = "war";
+                        else if (n.type === "diplomacy") newsType = "diplomacy";
+                        else if (n.type === "economy") newsType = "economy";
+                        else if (typeof n.content === "string") newsType = categorizeNewsType(n.content);
+                        
+                        return {
+                          id: n.id || Date.now() + i,
+                          title: n.title || newsTitleByType[newsType],
+                          content: n.content,
+                          type: newsType,
+                        };
+                      }));
                 }
               }
             } catch (newsError) {
@@ -1410,13 +1452,16 @@ export default function Home() {
                 <h3 className="text-xl font-bold text-[#C9A227] font-serif mb-4 flex items-center gap-2">
                   <span>📖</span> 현재 상황
                 </h3>
-                <p className="text-[#F5F5DC] leading-relaxed">
-                  {selectedNation === "goguryeo" &&
-                    "북방의 맹주 고구려의 왕좌에 오르신 것을 축하드립니다. 광개토대왕의 위업을 이어받아 만주와 한반도를 호령할 때입니다. 남쪽의 백제와 신라가 호시탐탐 영토를 노리고 있으니, 경계를 게을리하지 마소서."}
-                  {selectedNation === "baekje" &&
-                    "해상 강국 백제의 왕으로 즉위하셨습니다. 선왕들이 쌓아온 문화와 무역의 기반 위에서, 이제 천하 통일의 대업을 시작할 때입니다. 북쪽의 고구려와 동쪽의 신라를 경계하며 국력을 키우소서."}
-                  {selectedNation === "silla" &&
-                    "동방의 금관 신라의 군주가 되셨습니다. 화랑도의 충성과 백성들의 단결력이 당신의 가장 큰 자산입니다. 강대국들 사이에서 현명한 외교와 과감한 결단으로 천하를 도모하소서."}
+                <p className="text-[#F5F5DC] leading-relaxed whitespace-pre-line">
+                  {currentSituation || (
+                    selectedNation === "goguryeo" ?
+                      "북방의 맹주 고구려의 왕좌에 오르신 것을 축하드립니다. 광개토대왕의 위업을 이어받아 만주와 한반도를 호령할 때입니다. 남쪽의 백제와 신라가 호시탐탐 영토를 노리고 있으니, 경계를 게을리하지 마소서." :
+                    selectedNation === "baekje" ?
+                      "해상 강국 백제의 왕으로 즉위하셨습니다. 선왕들이 쌓아온 문화와 무역의 기반 위에서, 이제 천하 통일의 대업을 시작할 때입니다. 북쪽의 고구려와 동쪽의 신라를 경계하며 국력을 키우소서." :
+                    selectedNation === "silla" ?
+                      "동방의 금관 신라의 군주가 되셨습니다. 화랑도의 충성과 백성들의 단결력이 당신의 가장 큰 자산입니다. 강대국들 사이에서 현명한 외교와 과감한 결단으로 천하를 도모하소서." :
+                      "국가를 선택하고 명령을 내려 현재 상황을 업데이트하세요."
+                  )}
                 </p>
               </section>
 

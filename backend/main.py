@@ -3,9 +3,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlmodel import Session, select
 from datetime import datetime
 import random
-from database import engine, create_db_and_tables, get_session
-from models import Country, CommandLog, NewsItem, MilitaryUnit, Diplomacy, SecretIntelligence
-from ai_service import get_gemini_game_data, get_ai_country_turn
+import asyncio
+from backend.database import engine, create_db_and_tables, get_session
+from backend.models import Country, CommandLog, NewsItem, MilitaryUnit, Diplomacy, SecretIntelligence
+from backend.ai_service import get_gemini_game_data, get_ai_country_turn
 
 app = FastAPI()
 
@@ -67,6 +68,37 @@ def check_spy_intelligence_leak(country_id: str, session: Session) -> dict:
         "leaked": len(leaked_details) > 0,
         "details": leaked_details
     }
+
+
+SPY_UNIT_TYPES = {"spy", "assassin", "scout", "infiltrator"}
+
+
+def adjust_military_for_spy(country: Country, unit_type: str, unit_count: int):
+    """스파이 계열 유닛이 늘면 군사력을 함께 증가시킨다."""
+    if unit_type in SPY_UNIT_TYPES:
+        country.military += unit_count
+def categorize_news(text: str) -> str:
+    """뉴스 텍스트를 war/diplomacy/economy/event로 분류"""
+    lower = text.lower()
+    war_kw = ["전투", "전쟁", "침공", "군사", "병력", "공격", "방어", "전황", "전선", "포격", "기습", "전투력"]
+    dip_kw = ["외교", "동맹", "휴전", "협상", "조약", "국교", "사절", "회담", "관계", "우호"]
+    eco_kw = ["재정", "경제", "무역", "금", "곡물", "세금", "물가", "수입", "지출", "시장", "상업"]
+    if any(k in lower for k in war_kw):
+        return "war"
+    if any(k in lower for k in dip_kw):
+        return "diplomacy"
+    if any(k in lower for k in eco_kw):
+        return "economy"
+    return "event"
+
+
+def news_title_for_type(news_type: str) -> str:
+    return {
+        "war": "전황 보고",
+        "diplomacy": "외교 보고",
+        "economy": "경제 보고",
+        "event": "국내 소식",
+    }.get(news_type, "국내 소식")
 
 
 @app.get("/")
@@ -363,25 +395,34 @@ async def handle_game_turn(
     # totalScore 자동 계산
     country.update_total_score()
     
-    # 명령 로그 저장
+    # 명령 로그 저장 (비밀 뉴스 우선)
+    secret_text = "\n".join(ai_data.get('secret_news', []) or [])
+    command_response_text = secret_text if secret_text else ai_data.get('scenario', '')
     command_log = CommandLog(
         countryID=country_id,
         command=user_input,
-        response=ai_data.get('scenario', ''),
+        response=command_response_text,
         timestamp=datetime.utcnow()
     )
     session.add(command_log)
     
-    # 공개 뉴스 저장
+    # 공개 뉴스 저장 및 응답용 목록
+    public_news_items = []
     for news_text in ai_data.get('public_news', []):
+        news_type = categorize_news(news_text)
         news_item = NewsItem(
             countryID=country_id,
-            title=news_text,
+            title=news_title_for_type(news_type),
             content=news_text,
-            type="general",
+            type=news_type,
             is_public=True
         )
         session.add(news_item)
+        public_news_items.append({
+            "title": news_item.title,
+            "content": news_text,
+            "type": news_type,
+        })
     
     # 비밀 뉴스 저장 (공개 안 됨)
     for news_text in ai_data.get('secret_news', []):
@@ -422,6 +463,7 @@ async def handle_game_turn(
                     unit_type=unit_type
                 )
                 session.add(new_unit)
+            adjust_military_for_spy(country, unit_type, unit_count)
         
         elif action_type == 'diplomacy':
             # 외교 관계 업데이트
@@ -470,121 +512,142 @@ async def handle_game_turn(
     # 스파이 정보 유출 체크
     spy_leak_info = check_spy_intelligence_leak(country_id, session)
     
-    # 다른 두 국가 자동 AI 턴 진행
+    # 다른 두 국가 자동 AI 턴 진행 (Gemini 호출 병렬화)
     other_countries_news = {}
+    ai_targets = []
     for other_country_db in all_countries_db:
         if other_country_db.id != country_id:
-            # AI 국가의 외교 및 군사 정보 포함
             other_stats = all_countries_dict[other_country_db.id].copy()
-            # 외교 및 군사 정보는 이미 all_countries_dict에 포함되어 있음
-            ai_turn_data = await get_ai_country_turn(other_stats, all_countries_dict)
-            
-            # 스탯 업데이트
-            other_changes = ai_turn_data.get('changes', {})
-            other_country_db.finance += other_changes.get('finance', 0)
-            other_country_db.population += other_changes.get('population', 0)
-            other_country_db.military += other_changes.get('military', 0)
-            other_country_db.happiness += other_changes.get('happiness', 0)
-            other_country_db.turn += 1
-            other_country_db.update_total_score()
-            
-            # 공개 뉴스 저장
-            for news_text in ai_turn_data.get('public_news', []):
-                news_item = NewsItem(
-                    countryID=other_country_db.id,
-                    title=news_text,
-                    content=news_text,
-                    type="ai_turn",
-                    is_public=True
-                )
-                session.add(news_item)
-            
-            # 비밀 뉴스 저장 (공개 안 됨)
-            for news_text in ai_turn_data.get('secret_news', []):
-                news_item = NewsItem(
-                    countryID=other_country_db.id,
-                    title=news_text,
-                    content=news_text,
-                    type="secret",
-                    is_public=False
-                )
-                session.add(news_item)
-            
-            # AI 액션 처리
-            for action in ai_turn_data.get('actions', []):
-                action_type = action.get('type')
-                
-                if action_type == 'add_military':
-                    unit_name = action.get('name')
-                    unit_count = action.get('count', 0)
-                    unit_icon = action.get('icon', '⚔️')
-                    unit_type = action.get('unit_type', 'regular')
-                    
-                    stmt = select(MilitaryUnit).where(
-                        (MilitaryUnit.countryID == other_country_db.id) & 
-                        (MilitaryUnit.name == unit_name)
-                    )
-                    existing_unit = session.exec(stmt).first()
-                    
-                    if existing_unit:
-                        existing_unit.count += unit_count
-                    else:
-                        new_unit = MilitaryUnit(
-                            countryID=other_country_db.id,
-                            name=unit_name,
-                            count=unit_count,
-                            icon=unit_icon,
-                            unit_type=unit_type
-                        )
-                        session.add(new_unit)
-                
-                elif action_type == 'diplomacy':
-                    target_name = action.get('target')
-                    status = action.get('status', '중립')
-                    favorability = action.get('favorability', 0)
-                    
-                    stmt = select(Diplomacy).where(
-                        (Diplomacy.sourceID == other_country_db.id) & 
-                        (Diplomacy.targetName == target_name)
-                    )
-                    existing_diplomacy = session.exec(stmt).first()
-                    
-                    if existing_diplomacy:
-                        existing_diplomacy.status = status
-                        existing_diplomacy.favorability += favorability
-                    else:
-                        new_diplomacy = Diplomacy(
-                            sourceID=other_country_db.id,
-                            targetName=target_name,
-                            status=status,
-                            favorability=favorability
-                        )
-                        session.add(new_diplomacy)
-                
-                elif action_type == 'secret_operation':
-                    # 비밀 작전 저장
-                    title = action.get('title', '비밀 작전')
-                    content = action.get('content', '')
-                    operation_type = action.get('operation_type', '기타')
-                    shared_with = action.get('shared_with', [])
-                    
-                    secret_intel = SecretIntelligence(
-                        countryID=other_country_db.id,
-                        title=title,
-                        content=content,
-                        intelligence_type=operation_type
-                    )
-                    secret_intel.set_shared_countries(shared_with)
-                    session.add(secret_intel)
-            
-            session.add(other_country_db)
-            
-            # 다른 국가 뉴스를 반환 데이터에 포함
-            other_countries_news[other_country_db.id] = {
-                "name": other_country_db.name,
-                "scenario": ai_turn_data.get('scenario', ''),
-                "public_news": ai_turn_data.get('public_news', [])
+            ai_targets.append((other_country_db, other_stats))
+    ai_results = await asyncio.gather(
+        *(get_ai_country_turn(stats, all_countries_dict) for _, stats in ai_targets)
+    ) if ai_targets else []
+
+    for (other_country_db, _), ai_turn_data in zip(ai_targets, ai_results):
+        # 스탯 업데이트
+        other_changes = ai_turn_data.get('changes', {})
+        if not any(other_changes.values()):
+            # 기본 증가값: 재정/인구/군사/행복에 소폭 변화 부여 (정체 방지)
+            other_changes = {
+                "finance": max(100, other_country_db.population // 200),
+                "population": max(0, other_country_db.population // 5000),
+                "military": max(1, other_country_db.military // 8 or 1),
+                "happiness": 1,
             }
+            ai_turn_data['changes'] = other_changes
+        other_country_db.finance += other_changes.get('finance', 0)
+        other_country_db.population += other_changes.get('population', 0)
+        other_country_db.military += other_changes.get('military', 0)
+        other_country_db.happiness += other_changes.get('happiness', 0)
+        other_country_db.turn += 1
+        other_country_db.update_total_score()
+        
+        # 공개 뉴스 저장 (타입 분류)
+        for news_text in ai_turn_data.get('public_news', []):
+            news_type = categorize_news(news_text)
+            news_item = NewsItem(
+                countryID=other_country_db.id,
+                title=news_title_for_type(news_type),
+                content=news_text,
+                type=news_type,
+                is_public=True
+            )
+            session.add(news_item)
+        
+        # 비밀 뉴스 저장 (공개 안 됨)
+        for news_text in ai_turn_data.get('secret_news', []):
+            news_item = NewsItem(
+                countryID=other_country_db.id,
+                title=news_text,
+                content=news_text,
+                type="secret",
+                is_public=False
+            )
+            session.add(news_item)
+        
+        # AI 액션 처리
+        for action in ai_turn_data.get('actions', []):
+            action_type = action.get('type')
+            
+            if action_type == 'add_military':
+                unit_name = action.get('name')
+                unit_count = action.get('count', 0)
+                unit_icon = action.get('icon', '⚔️')
+                unit_type = action.get('unit_type', 'regular')
+                
+                stmt = select(MilitaryUnit).where(
+                    (MilitaryUnit.countryID == other_country_db.id) & 
+                    (MilitaryUnit.name == unit_name)
+                )
+                existing_unit = session.exec(stmt).first()
+                
+                if existing_unit:
+                    existing_unit.count += unit_count
+                else:
+                    new_unit = MilitaryUnit(
+                        countryID=other_country_db.id,
+                        name=unit_name,
+                        count=unit_count,
+                        icon=unit_icon,
+                        unit_type=unit_type
+                    )
+                    session.add(new_unit)
+                adjust_military_for_spy(other_country_db, unit_type, unit_count)
+            
+            elif action_type == 'diplomacy':
+                target_name = action.get('target')
+                status = action.get('status', '중립')
+                favorability = action.get('favorability', 0)
+                
+                stmt = select(Diplomacy).where(
+                    (Diplomacy.sourceID == other_country_db.id) & 
+                    (Diplomacy.targetName == target_name)
+                )
+                existing_diplomacy = session.exec(stmt).first()
+                
+                if existing_diplomacy:
+                    existing_diplomacy.status = status
+                    existing_diplomacy.favorability += favorability
+                else:
+                    new_diplomacy = Diplomacy(
+                        sourceID=other_country_db.id,
+                        targetName=target_name,
+                        status=status,
+                        favorability=favorability
+                    )
+                    session.add(new_diplomacy)
+            
+            elif action_type == 'secret_operation':
+                # 비밀 작전 저장
+                title = action.get('title', '비밀 작전')
+                content = action.get('content', '')
+                operation_type = action.get('operation_type', '기타')
+                shared_with = action.get('shared_with', [])
+                
+                secret_intel = SecretIntelligence(
+                    countryID=other_country_db.id,
+                    title=title,
+                    content=content,
+                    intelligence_type=operation_type
+                )
+                secret_intel.set_shared_countries(shared_with)
+                session.add(secret_intel)
+        
+        session.add(other_country_db)
+        
+        # 다른 국가 뉴스를 반환 데이터에 포함 + 최신 스탯 반영
+        other_countries_news[other_country_db.id] = {
+            "name": other_country_db.name,
+            "scenario": ai_turn_data.get('scenario', ''),
+            "public_news": ai_turn_data.get('public_news', []),
+            "finance": other_country_db.finance,
+            "population": other_country_db.population,
+            "happiness": other_country_db.happiness,
+            "military": other_country_db.military,
+            "turn": other_country_db.turn,
+            "totalScore": other_country_db.totalScore,
+            "color": other_country_db.color,
+        }
     
     session.commit()
     session.refresh(country)
@@ -593,6 +656,7 @@ async def handle_game_turn(
         "scenario": ai_data.get('scenario', ''),
         "mood": ai_data.get('mood', 'neutral'),
         "public_news": ai_data.get('public_news', []),
+        "public_news_items": public_news_items,
         "secret_news": ai_data.get('secret_news', []),
         "spy_leak_info": spy_leak_info,
         "updated_stats": {
@@ -601,7 +665,8 @@ async def handle_game_turn(
             "happiness": country.happiness,
             "military": country.military,
             "turn": country.turn,
-            "totalScore": country.totalScore
+            "totalScore": country.totalScore,
+            "color": country.color,
         },
         "other_countries": other_countries_news
     }
@@ -670,6 +735,12 @@ async def add_military_unit(
             icon=icon
         )
         session.add(unit)
+
+    # 스파이 계열이면 군사력 증가
+    country = session.exec(select(Country).where(Country.id == country_id)).first()
+    if country:
+        adjust_military_for_spy(country, unit.unit_type, count)
+        country.update_total_score()
     
     session.commit()
     session.refresh(unit)
