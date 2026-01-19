@@ -38,6 +38,7 @@ interface CommandLog {
   command: string;
   response: string;
   timestamp: Date;
+  isLoading?: boolean;
 }
 
 // 슬롯머신 단일 자릿수 컴포넌트
@@ -565,6 +566,17 @@ export default function Home() {
     const command = commandInput;
     setCommandInput("");
 
+    // 로딩 카드 즉시 추가
+    const loadingLogId = Date.now();
+    const loadingLog: CommandLog = {
+      id: loadingLogId,
+      command,
+      response: "",
+      timestamp: new Date(),
+      isLoading: true,
+    };
+    setCommandLogs((prev) => [...prev, loadingLog]);
+
     try {
       // Backend API 호출
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -583,15 +595,18 @@ export default function Home() {
 
       const data = await response.json();
 
-      // Backend 응답으로 상태 업데이트
+      // 로딩 카드를 실제 응답으로 교체
       const newLog: CommandLog = {
-        id: Date.now(),
+        id: loadingLogId,
         command,
         response: data.scenario,
         timestamp: new Date(),
+        isLoading: false,
       };
 
-      setCommandLogs((prev) => [...prev, newLog]);
+      setCommandLogs((prev) => 
+        prev.map((log) => log.id === loadingLogId ? newLog : log)
+      );
 
       // 뉴스 업데이트
       if (data.public_news && Array.isArray(data.public_news)) {
@@ -672,14 +687,17 @@ export default function Home() {
     } catch (error) {
       console.error("API 호출 실패:", error);
       
-      // 오류 발생 시 기본 응답
+      // 오류 발생 시 로딩 카드를 에러 메시지로 교체
       const errorLog: CommandLog = {
-        id: Date.now(),
+        id: loadingLogId,
         command,
         response: "명령 처리 중 오류가 발생했습니다. 백엔드 서버를 확인하세요.",
         timestamp: new Date(),
+        isLoading: false,
       };
-      setCommandLogs((prev) => [...prev, errorLog]);
+      setCommandLogs((prev) => 
+        prev.map((log) => log.id === loadingLogId ? errorLog : log)
+      );
     } finally {
       setIsLoading(false);
     }
@@ -1115,7 +1133,7 @@ export default function Home() {
                 <h3 className="text-xl font-bold text-[#C9A227] font-serif mb-4 flex items-center gap-2">
                   <span>📰</span> 금일의 소식
                 </h3>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 gap-4">
                   {news.map((item, index) => (
                     <NewsCard key={item.id} news={item} index={index} />
                   ))}
@@ -1144,9 +1162,18 @@ export default function Home() {
                             {log.command}
                           </span>
                         </div>
-                        <p className="text-[#A89F91] text-sm ml-5">
-                          {log.response}
-                        </p>
+                        {log.isLoading ? (
+                          <div className="flex items-center gap-2 ml-5 mt-2">
+                            <div className="loading-spinner" style={{ width: "16px", height: "16px" }}></div>
+                            <p className="text-[#A89F91] text-sm italic">
+                              {selectedNation && nationInfo[selectedNation].name}가 명령 하달 중...
+                            </p>
+                          </div>
+                        ) : (
+                          <p className="text-[#A89F91] text-sm ml-5">
+                            {log.response}
+                          </p>
+                        )}
                       </div>
                     ))
                   )}
@@ -1176,8 +1203,8 @@ export default function Home() {
                 onClick={() => setActiveTab("diplomacy")}
                 className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-all ${
                   activeTab === "diplomacy"
-                    ? "bg-[#C9A227] text-[#0d0d0d]"
-                    : "bg-black/20 backdrop-blur-md text-[#A89F91] hover:bg-black/30 border border-white/5"
+                    ? "bg-[#C9A227]/80 backdrop-blur-md text-[#0d0d0d] border border-[#C9A227]/30 shadow-lg"
+                    : "bg-black/10 backdrop-blur-md text-[#A89F91] hover:bg-black/20 border border-white/10 shadow-sm"
                 }`}
               >
                 🤝 외교
@@ -1186,8 +1213,8 @@ export default function Home() {
                 onClick={() => setActiveTab("military")}
                 className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-all ${
                   activeTab === "military"
-                    ? "bg-[#C9A227] text-[#0d0d0d]"
-                    : "bg-black/20 backdrop-blur-md text-[#A89F91] hover:bg-black/30 border border-white/5"
+                    ? "bg-[#C9A227]/80 backdrop-blur-md text-[#0d0d0d] border border-[#C9A227]/30 shadow-lg"
+                    : "bg-black/10 backdrop-blur-md text-[#A89F91] hover:bg-black/20 border border-white/10 shadow-sm"
                 }`}
               >
                 ⚔️ 군사
