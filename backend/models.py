@@ -26,8 +26,8 @@ class Country(SQLModel, table=True):
         """
         score = (
             (self.finance // 100) +
-            (self.population // 1000) +
-            (self.military * 100) +
+            (self.population // 100) +
+            (self.military * 50) +
             (self.happiness * 10)
         )
         return score

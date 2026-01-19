@@ -23,6 +23,7 @@ def _get_mock_response(user_input: str, current_stats: dict) -> dict:
     """Return mock response for testing/quota limits"""
     return {
         "scenario": "천천히 세력을 키우는 중입니다. 경제는 안정적이고 군사력도 강화되고 있습니다. 주변국과의 관계는 평화롭습니다.",
+        "mood": "neutral",
         "public_news": ["금 50개 획득", "인구 100명 증가", "군대 사기 향상"],
         "secret_news": [],
         "changes": {"finance": 50, "population": 100, "military": 1, "happiness": 5},
@@ -63,6 +64,7 @@ async def get_gemini_game_data(user_input: str, current_stats: dict, all_countri
 응답 JSON 형식:
 {{
     "scenario": "이번 턴의 상황 전개 (한국어, 3-4문장, 공개 정보만)",
+    "mood": "happy/neutral/angry",
     "public_news": ["공개 뉴스 1", "공개 뉴스 2"],
     "secret_news": ["비밀 뉴스 1 - 공개되지 않음"],
     "changes": {{"finance": 숫자, "population": 숫자, "military": 숫자, "happiness": 숫자}},
@@ -71,6 +73,11 @@ async def get_gemini_game_data(user_input: str, current_stats: dict, all_countri
         {{"type": "secret_operation", "title": "비밀 작전", "content": "내용", "operation_type": "군사_계획", "shared_with": [], "target_country": "백제"}}
     ]
 }}
+
+분위기(mood) 판단 기준:
+- happy: 긍정적, 승리, 번영, 성공적인 결과
+- neutral: 평범한 상황, 일상적인 발전
+- angry: 부정적, 패배, 위기, 좌절
 
 주의:
 - public_news만 사용자에게 공개됨
@@ -86,6 +93,12 @@ async def get_gemini_game_data(user_input: str, current_stats: dict, all_countri
         clean_json = response.text.replace('```json', '').replace('```', '').strip()
         result = json.loads(clean_json)
         
+        # 디버깅: Gemini API 응답 출력
+        print("=" * 80)
+        print("🤖 Gemini API Response:")
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        print("=" * 80)
+        
         # actions 필드가 없으면 빈 배열로 초기화
         if 'actions' not in result:
             result['actions'] = []
@@ -93,6 +106,8 @@ async def get_gemini_game_data(user_input: str, current_stats: dict, all_countri
             result['public_news'] = result.get('news', [])  # 하위 호환성
         if 'secret_news' not in result:
             result['secret_news'] = []
+        if 'mood' not in result:
+            result['mood'] = 'neutral'  # 기본값
         
         return result
     except Exception as e:
@@ -136,6 +151,7 @@ async def get_ai_country_turn(country_stats: dict, all_countries: dict) -> dict:
 응답 JSON 형식:
 {{
     "scenario": "이번 턴에 국가가 취한 행동과 결과 (3-4문장, 공개 정보만)",
+    "mood": "happy/neutral/angry",
     "public_news": ["뉴스 1", "뉴스 2"],
     "secret_news": ["비밀 뉴스 - 공개 안 됨"],
     "changes": {{"finance": 숫자, "population": 숫자, "military": 숫자, "happiness": 숫자}},
@@ -145,6 +161,11 @@ async def get_ai_country_turn(country_stats: dict, all_countries: dict) -> dict:
         {{"type": "secret_operation", "title": "암살 계획", "content": "내용", "operation_type": "암살", "shared_with": [], "target_country": "목표국가"}}
     ]
 }}
+
+분위기(mood) 판단 기준:
+- happy: 긍정적, 성공적 결과, 번영
+- neutral: 평범한 상황, 일상적 발전
+- angry: 부정적, 패배, 위기
         """
         
         # 텍스트 생성 요청
@@ -160,6 +181,8 @@ async def get_ai_country_turn(country_stats: dict, all_countries: dict) -> dict:
             result['public_news'] = result.get('news', [])
         if 'secret_news' not in result:
             result['secret_news'] = []
+        if 'mood' not in result:
+            result['mood'] = 'neutral'
         
         return result
     except Exception as e:
@@ -167,6 +190,7 @@ async def get_ai_country_turn(country_stats: dict, all_countries: dict) -> dict:
         # 기본 턴 진행
         return {
             "scenario": f"{country_stats['name']}이(가) 내정에 집중하고 있습니다.",
+            "mood": "neutral",
             "public_news": ["안정적인 발전 중"],
             "secret_news": [],
             "changes": {"finance": 100, "population": 50, "military": 0, "happiness": 1},
