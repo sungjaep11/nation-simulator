@@ -17,9 +17,6 @@ export default function LoginPage() {
     setError(null);
     setIsLoading(true);
 
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-
     // 이메일 형식 검사
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!email.trim() || !username.trim() || !password.trim()) {
@@ -33,12 +30,28 @@ export default function LoginPage() {
       return;
     }
 
-    // 사용자명을 localStorage에 저장
-    localStorage.setItem("username", username);
-    
-    // TODO: Add actual authentication logic here
-    // For now, redirect to tutorial page
-    router.push("/selection");
+    try {
+      // 백엔드에서 게임 데이터 초기화
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+      const resetResponse = await fetch(`${apiUrl}/api/reset`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+
+      if (!resetResponse.ok) {
+        throw new Error("게임 초기화에 실패했습니다.");
+      }
+
+      // 사용자명을 localStorage에 저장
+      localStorage.setItem("username", username);
+      
+      // 국가 선택 페이지로 이동
+      router.push("/selection");
+    } catch (error) {
+      console.error("로그인 중 오류:", error);
+      setError("게임 초기화 중 오류가 발생했습니다. 백엔드 서버를 확인하세요.");
+      setIsLoading(false);
+    }
   };
 
   return (

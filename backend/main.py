@@ -77,6 +77,15 @@ async def root():
 async def status():
     return {"status": "ok"}
 
+@app.post("/api/reset")
+async def reset_game(session: Session = Depends(get_session)):
+    """게임 데이터 초기화 - 로그인 시 호출"""
+    try:
+        initialize_game_data(session)
+        return {"message": "게임 데이터가 초기화되었습니다.", "status": "success"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"초기화 중 오류가 발생했습니다: {str(e)}")
+
 @app.get("/api/country/{country_id}")
 async def get_country(country_id: str, session: Session = Depends(get_session)):
     """특정 국가의 현재 상태 조회"""
@@ -182,53 +191,75 @@ async def get_command_logs(country_id: str, session: Session = Depends(get_sessi
         for l in logs
     ]
 
+def initialize_game_data(session: Session):
+    """게임 데이터 초기화 함수"""
+    # 모든 기존 데이터 삭제
+    for log in session.exec(select(CommandLog)).all():
+        session.delete(log)
+    for news in session.exec(select(NewsItem)).all():
+        session.delete(news)
+    for intel in session.exec(select(SecretIntelligence)).all():
+        session.delete(intel)
+    for unit in session.exec(select(MilitaryUnit)).all():
+        session.delete(unit)
+    for diplomacy in session.exec(select(Diplomacy)).all():
+        session.delete(diplomacy)
+    
+    # 모든 국가 삭제 후 재생성
+    for country in session.exec(select(Country)).all():
+        session.delete(country)
+    
+    session.commit()
+    
+    # 초기 데이터 삽입
+    countries = [
+        Country(
+            id="goguryeo",
+            name="고구려",
+            finance=15000,
+            population=80000,
+            military=15,
+            happiness=50,
+            turn=1,
+            title="호전적인 국가",
+            color="#FF6B6B"
+        ),
+        Country(
+            id="baekje",
+            name="백제",
+            finance=18000,
+            population=60000,
+            military=10,
+            happiness=50,
+            turn=1,
+            title="문화 강국",
+            color="#4ECDC4"
+        ),
+        Country(
+            id="silla",
+            name="신라",
+            finance=12000,
+            population=45000,
+            military=12,
+            happiness=50,
+            turn=1,
+            title="균형잡힌 국가",
+            color="#FFD93D"
+        )
+    ]
+    # 각 국가의 초기 totalScore 계산
+    for country in countries:
+        country.update_total_score()
+    
+    session.add_all(countries)
+    session.commit()
+
 @app.on_event("startup")
 def on_startup():
     create_db_and_tables()
     with Session(engine) as session:
         if not session.exec(select(Country)).first():
-            # 초기 데이터 삽입
-            countries = [
-                Country(
-                    id="goguryeo",
-                    name="고구려",
-                    finance=15000,
-                    population=80000,
-                    military=15,
-                    happiness=50,
-                    turn=1,
-                    title="호전적인 국가",
-                    color="#FF6B6B"
-                ),
-                Country(
-                    id="baekje",
-                    name="백제",
-                    finance=18000,
-                    population=60000,
-                    military=10,
-                    happiness=50,
-                    turn=1,
-                    title="문화 강국",
-                    color="#4ECDC4"
-                ),
-                Country(
-                    id="silla",
-                    name="신라",
-                    finance=12000,
-                    population=45000,
-                    military=12,
-                    happiness=50,
-                    turn=1,
-                    title="균형잡힌 국가",
-                    color="#FFD93D"
-                )
-            ]
-            # 각 국가의 초기 totalScore 계산
-            for country in countries:
-                country.update_total_score()
-            
-            session.add_all(countries)
-            session.commit()
+            initialize_game_data(session)
 
 @app.post("/api/action")
 async def handle_game_turn(
