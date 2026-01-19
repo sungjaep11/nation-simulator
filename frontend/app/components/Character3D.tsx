@@ -8,10 +8,12 @@ import * as THREE from "three";
 
 type NationType = "goguryeo" | "baekje" | "silla";
 type AnimationType = "normal" | "appearance";
+type MoodType = "happy" | "neutral" | "angry" | "depressed";
 
 interface Character3DProps {
   nation: NationType;
   animationType?: AnimationType;
+  mood?: MoodType;
   size?: "full" | "small";
   shouldPlay?: boolean;
   x?: number;
@@ -20,6 +22,7 @@ interface Character3DProps {
 function Model({
   nation,
   animationType = "normal",
+  mood = "neutral",
   scale = 1.25,
   y = -0.7,
   shouldPlay = true,
@@ -27,12 +30,15 @@ function Model({
 }: {
   nation: NationType;
   animationType?: AnimationType;
+  mood?: MoodType;
   scale?: number;
   y?: number;
   shouldPlay?: boolean;
   x?: number;
 }) {
   const modelPath = useMemo(() => {
+    // 분위기와 애니메이션 타입에 따른 모델 선택
+    // animationType이 "appearance"면 그대로 사용, 아니면 mood에 따라 결정
     if (animationType === "appearance") {
       switch (nation) {
         case "goguryeo":
@@ -41,11 +47,44 @@ function Model({
           return "/models/baekjae/baekjae_Animation_Dive_appearance.glb";
         case "silla":
           return "/models/shilla/Shilla_Animation_Hello.glb";
-        default:
-          return "/models/goguryeo/goguryeo_Animation_bow_appearnace.glb";
       }
     }
-
+    
+    // mood에 따라 모델 선택
+    if (mood === "happy") {
+      switch (nation) {
+        case "goguryeo":
+          return "/models/goguryeo/goguryeo_Animation_Happy.glb";
+        case "baekje":
+          return "/models/baekjae/baekjae_Animation_Happy.glb";
+        case "silla":
+          return "/models/shilla/Shilla_Animation_Happy.glb";
+      }
+    }
+    
+    if (mood === "angry") {
+      switch (nation) {
+        case "goguryeo":
+          return "/models/goguryeo/goguryeo_Animation_angry.glb";
+        case "baekje":
+          return "/models/baekjae/baekjae_Animation_angry.glb";
+        case "silla":
+          return "/models/shilla/Shilla_Animation_angry.glb";
+      }
+    }
+    
+    if (mood === "depressed") {
+      switch (nation) {
+        case "goguryeo":
+          return "/models/goguryeo/goguryeo_Animation_depressed.glb";
+        case "baekje":
+          return "/models/baekjae/baekjae_Animation_depressed.glb";
+        case "silla":
+          return "/models/shilla/Shilla_Animation_depressed.glb";
+      }
+    }
+    
+    // neutral 또는 기본값
     switch (nation) {
       case "goguryeo":
         return "/models/goguryeo/goguryeo_Animation_normal.glb";
@@ -53,10 +92,8 @@ function Model({
         return "/models/baekjae/bakejae_Animation_normal.glb";
       case "silla":
         return "/models/shilla/Shilla_Animation_normal.glb";
-      default:
-        return "/models/goguryeo/goguryeo_Animation_normal.glb";
     }
-  }, [nation, animationType]);
+  }, [nation, animationType, mood]);
 
   const { scene, animations } = useGLTF(modelPath);
   const { actions } = useAnimations(animations, scene);
@@ -97,6 +134,7 @@ function Loading() {
 export default function Character3D({
   nation,
   animationType = "normal",
+  mood = "neutral",
   size = "full",
   shouldPlay = true,
   x = 0,
@@ -118,7 +156,7 @@ export default function Character3D({
         <directionalLight position={[-5, 5, -5]} intensity={0.5} />
 
         <Suspense fallback={<Loading />}>
-          <Model nation={nation} animationType={animationType} scale={1.25} y={-0.7} shouldPlay={shouldPlay} x={x} />
+          <Model nation={nation} animationType={animationType} mood={mood} scale={1.25} y={-0.7} shouldPlay={shouldPlay} x={x} />
         </Suspense>
 
         {!isSmall && (

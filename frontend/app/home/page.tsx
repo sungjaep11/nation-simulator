@@ -219,30 +219,15 @@ function StatItem({
 
     const nationData = [
       { nation: "고구려", value: statType === "totalScore" 
-        ? (scores.goguryeo ?? (
-            Math.floor(allNationStats.goguryeo.finance / 100) +
-            Math.floor(allNationStats.goguryeo.population / 1000) +
-            allNationStats.goguryeo.happiness * 10 +
-            allNationStats.goguryeo.military * 100
-          ))
+        ? (scores.goguryeo ?? 0)
         : allNationStats.goguryeo[statType],
         type: "goguryeo" as const },
       { nation: "백제", value: statType === "totalScore"
-        ? (scores.baekje ?? (
-            Math.floor(allNationStats.baekje.finance / 100) +
-            Math.floor(allNationStats.baekje.population / 1000) +
-            allNationStats.baekje.happiness * 10 +
-            allNationStats.baekje.military * 100
-          ))
+        ? (scores.baekje ?? 0)
         : allNationStats.baekje[statType],
         type: "baekje" as const },
       { nation: "신라", value: statType === "totalScore"
-        ? (scores.silla ?? (
-            Math.floor(allNationStats.silla.finance / 100) +
-            Math.floor(allNationStats.silla.population / 1000) +
-            allNationStats.silla.happiness * 10 +
-            allNationStats.silla.military * 100
-          ))
+        ? (scores.silla ?? 0)
         : allNationStats.silla[statType],
         type: "silla" as const },
     ];
@@ -532,6 +517,7 @@ export default function Home() {
     silla?: number;
   }>({});
   const [currentTotalScore, setCurrentTotalScore] = useState<number>(0);
+  const [currentMood, setCurrentMood] = useState<"happy" | "neutral" | "angry" | "depressed">("neutral");
   const [news, setNews] = useState<NewsItem[]>([
     {
       id: 1,
@@ -680,6 +666,11 @@ export default function Home() {
           setCurrentTotalScore(newStats.totalScore);
         }
         
+        // 백엔드에서 받은 mood 저장
+        if (data.mood) {
+          setCurrentMood(data.mood as "happy" | "neutral" | "angry" | "depressed");
+        }
+        
         return {
           finance: newStats.finance,
           population: newStats.population,
@@ -754,13 +745,8 @@ export default function Home() {
     }
   }, [turn]);
 
-  // 백엔드에서 받은 totalScore 사용 (없으면 계산)
-  const totalScore = currentTotalScore || (
-    Math.floor(stats.finance / 100) +
-    Math.floor(stats.population / 1000) +
-    stats.happiness * 10 +
-    stats.military * 100
-  );
+  // 백엔드에서 받은 totalScore 사용
+  const totalScore = currentTotalScore;
 
   const prevTotalScoreRef = useRef(totalScore);
   const prevTotalScore = prevTotalScoreRef.current;
@@ -1134,6 +1120,7 @@ export default function Home() {
                 key={selectedNation}
                 nation={selectedNation} 
                 animationType="normal"
+                mood={currentMood}
                 shouldPlay={true}
               />
             </div>

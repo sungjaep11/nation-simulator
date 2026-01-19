@@ -216,9 +216,9 @@ def initialize_game_data(session: Session):
         Country(
             id="goguryeo",
             name="고구려",
-            finance=15000,
-            population=80000,
-            military=15,
+            finance=14000,
+            population=51000,
+            military=17,
             happiness=50,
             turn=1,
             title="호전적인 국가",
@@ -227,9 +227,9 @@ def initialize_game_data(session: Session):
         Country(
             id="baekje",
             name="백제",
-            finance=18000,
-            population=60000,
-            military=10,
+            finance=50000,
+            population=35000,
+            military=13,
             happiness=50,
             turn=1,
             title="문화 강국",
@@ -238,9 +238,9 @@ def initialize_game_data(session: Session):
         Country(
             id="silla",
             name="신라",
-            finance=12000,
-            population=45000,
-            military=12,
+            finance=10000,
+            population=70000,
+            military=14,
             happiness=50,
             turn=1,
             title="균형잡힌 국가",
@@ -591,6 +591,7 @@ async def handle_game_turn(
 
     return {
         "scenario": ai_data.get('scenario', ''),
+        "mood": ai_data.get('mood', 'neutral'),
         "public_news": ai_data.get('public_news', []),
         "secret_news": ai_data.get('secret_news', []),
         "spy_leak_info": spy_leak_info,
