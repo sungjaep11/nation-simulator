@@ -1,11 +1,100 @@
 from sqlmodel import SQLModel, Field
-from typing import Optional
+from typing import Optional, List
+from datetime import datetime
+import json
 
 class Country(SQLModel, table=True):
-    id: Optional[int] = Field(default=None, primary_key=True)
+    id: str = Field(primary_key=True)
     name: str = Field(index=True)
-    gold: int = 10000
+    finance: int = 10000
     population: int = 50000
-    happiness: int = 20
-    military: int = 5
-    total_score: int = (gold/10000 +population/10000 + happiness/10 + military/10) 
+    happiness: int = 50
+    military: int = 10
+    totalScore: int = 0
+    turn: int = 1
+    title: str = ""
+    color: str = ""
+    
+    def calculate_total_score(self) -> int:
+        """국가의 종합 점수 계산
+        
+        재정, 인구, 군사력, 행복도를 종합하여 점수를 산출합니다.
+        - 재정: 100당 1점
+        - 인구: 1000당 1점
+        - 군사력: 1당 100점
+        - 행복도: 1당 10점
+        """
+        score = (
+            (self.finance // 100) +
+            (self.population // 1000) +
+            (self.military * 100) +
+            (self.happiness * 10)
+        )
+        return score
+    
+    def update_total_score(self):
+        """totalScore를 현재 상태 기반으로 업데이트"""
+        self.totalScore = self.calculate_total_score()
+
+
+class CommandLog(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    countryID: str = Field(foreign_key="country.id")
+    command: str
+    response: str
+    timestamp: datetime = Field(default_factory=datetime.utcnow)
+
+
+class NewsItem(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    countryID: str = Field(foreign_key="country.id")
+    title: str
+    content: str
+    type: str  # "general", "ai_turn", "public_only"
+    is_public: bool = True  # False면 비밀 정보 (뉴스로 공개 안 됨)
+
+
+class SecretIntelligence(SQLModel, table=True):
+    """비밀 정보 - 공개되지 않는 민감한 정보"""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    countryID: str = Field(foreign_key="country.id")  # 정보의 소유자
+    title: str
+    content: str
+    intelligence_type: str  # "military_plan", "diplomacy_plot", "spy_operation" 등
+    shared_with: str = ""  # JSON 형식: ["baekje", "silla"] - 공유할 국가들
+    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    
+    def get_shared_countries(self) -> List[str]:
+        """공유하는 국가 목록 반환"""
+        if not self.shared_with:
+            return []
+        return json.loads(self.shared_with)
+    
+    def set_shared_countries(self, countries: List[str]):
+        """공유할 국가 목록 설정"""
+        self.shared_with = json.dumps(countries, ensure_ascii=False)
+    
+    def is_shared_with(self, country_id: str) -> bool:
+        """특정 국가와 공유 여부 확인"""
+        return country_id in self.get_shared_countries()
+
+
+class MilitaryUnit(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    countryID: str = Field(foreign_key="country.id")
+    name: str
+    count: int
+    icon: str
+    unit_type: str = "regular"  # "regular", "spy", "assassin" 등
+    
+    def is_spy(self) -> bool:
+        """스파이 여부 확인"""
+        return self.unit_type in ["spy", "assassin", "scout", "infiltrator"]
+
+
+class Diplomacy(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    sourceID: str = Field(foreign_key="country.id")
+    targetName: str
+    status: str
+    favorability: int = 0
