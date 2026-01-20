@@ -107,6 +107,18 @@ class Diplomacy(SQLModel, table=True):
     favorability: int = 0
 
 
+class Territory(SQLModel, table=True):
+    """영토 소유권 정보"""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(foreign_key="user.id", index=True)  # 사용자별로 영토 분리
+    province_name: str = Field(index=True)  # 지역명 (예: "인천광역시", "서울특별시")
+    owner: str = Field(index=True)  # 소유 국가 ID (예: "goguryeo", "baekje", "silla")
+    
+    class Config:
+        # user_id와 province_name의 조합이 고유해야 함
+        pass
+
+
 class User(SQLModel, table=True):
     """사용자 정보 - Google OAuth 및 이메일/비밀번호 인증"""
     id: Optional[int] = Field(default=None, primary_key=True)

@@ -95,6 +95,57 @@ def _get_mock_response(user_input: str, current_stats: dict) -> dict:
         "actions": []
     }
 
+
+def _find_complete_json(text: str) -> str:
+    """중괄호 균형을 맞춰 완전한 JSON 객체를 찾습니다."""
+    start = text.find('{')
+    if start == -1:
+        return ""
+    
+    depth = 0
+    in_string = False
+    escape_next = False
+    
+    for i, char in enumerate(text[start:], start):
+        if escape_next:
+            escape_next = False
+            continue
+        if char == '\\':
+            escape_next = True
+            continue
+        if char == '"' and not escape_next:
+            in_string = not in_string
+            continue
+        if in_string:
+            continue
+        if char == '{':
+            depth += 1
+        elif char == '}':
+            depth -= 1
+            if depth == 0:
+                return text[start:i+1]
+    return ""
+
+
+def _extract_json_from_response(response_text: str) -> str:
+    """AI 응답에서 JSON 객체를 추출합니다."""
+    clean_json = response_text.strip()
+    
+    # JSON 코드 블록 제거
+    if '```json' in clean_json:
+        start = clean_json.find('```json') + 7
+        end = clean_json.find('```', start)
+        if end != -1:
+            clean_json = clean_json[start:end].strip()
+    elif '```' in clean_json:
+        start = clean_json.find('```') + 3
+        end = clean_json.find('```', start)
+        if end != -1:
+            clean_json = clean_json[start:end].strip()
+    
+    # 완전한 JSON 객체 찾기 (중괄호 균형 맞추기)
+    return _find_complete_json(clean_json)
+
 async def get_gemini_game_data(user_input: str, current_stats: dict, all_countries: Optional[dict] = None):
     """
     Gemini를 통해 시나리오, 뉴스, 스탯 변화 및 액션을 JSON으로 생성합니다.
@@ -212,6 +263,8 @@ async def get_gemini_game_data(user_input: str, current_stats: dict, all_countri
 - 전쟁 시뮬레이션: 유저가 승리하기 쉽도록 설정 (70% 승리 확률)
 - **전쟁은 전면전으로, 외교는 70% 성공률로 유저에게 유리하게**
 - 유저의 명령이 명확하면 반드시 해당 액션을 생성하세요
+
+**[절대 규칙] 반드시 위의 JSON 형식으로만 응답하세요. 설명, 마크다운, 추가 텍스트 없이 오직 JSON 객체 하나만 출력하세요.**
         """
         
         # 텍스트 생성 요청
@@ -224,25 +277,7 @@ async def get_gemini_game_data(user_input: str, current_stats: dict, all_countri
         print("=" * 80)
         
         # JSON 문자열 추출 및 파싱
-        clean_json = response_text.strip()
-        
-        # JSON 코드 블록 제거
-        if '```json' in clean_json:
-            start = clean_json.find('```json') + 7
-            end = clean_json.find('```', start)
-            if end != -1:
-                clean_json = clean_json[start:end].strip()
-        elif '```' in clean_json:
-            start = clean_json.find('```') + 3
-            end = clean_json.find('```', start)
-            if end != -1:
-                clean_json = clean_json[start:end].strip()
-        
-        # JSON 객체 찾기 (중괄호로 시작하는 부분)
-        start_brace = clean_json.find('{')
-        end_brace = clean_json.rfind('}')
-        if start_brace != -1 and end_brace != -1 and end_brace > start_brace:
-            clean_json = clean_json[start_brace:end_brace + 1]
+        clean_json = _extract_json_from_response(response_text)
         
         if not clean_json:
             raise ValueError("응답에서 JSON을 찾을 수 없습니다.")
@@ -386,31 +421,15 @@ async def get_ai_country_turn(country_stats: dict, all_countries: dict) -> dict:
      * add_military는 매우 드물게만 포함 (대부분의 턴에는 actions가 비어있거나 다른 액션만 포함)
     ]
 }}
+
+**[절대 규칙] 반드시 위의 JSON 형식으로만 응답하세요. 설명, 마크다운, 추가 텍스트 없이 오직 JSON 객체 하나만 출력하세요.**
         """
         
         # 텍스트 생성 요청
         response_text = await _generate_text_with_retry(prompt, model_name=AI_MODEL)
         
         # JSON 문자열 추출 및 파싱
-        clean_json = response_text.strip()
-        
-        # JSON 코드 블록 제거
-        if '```json' in clean_json:
-            start = clean_json.find('```json') + 7
-            end = clean_json.find('```', start)
-            if end != -1:
-                clean_json = clean_json[start:end].strip()
-        elif '```' in clean_json:
-            start = clean_json.find('```') + 3
-            end = clean_json.find('```', start)
-            if end != -1:
-                clean_json = clean_json[start:end].strip()
-        
-        # JSON 객체 찾기 (중괄호로 시작하는 부분)
-        start_brace = clean_json.find('{')
-        end_brace = clean_json.rfind('}')
-        if start_brace != -1 and end_brace != -1 and end_brace > start_brace:
-            clean_json = clean_json[start_brace:end_brace + 1]
+        clean_json = _extract_json_from_response(response_text)
         
         if not clean_json:
             raise ValueError("응답에서 JSON을 찾을 수 없습니다.")

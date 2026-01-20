@@ -295,7 +295,8 @@ function StatItem({
           <span className="font-bold text-[#F5F5DC] font-serif">
             <RollingNumber value={value} prefix={prefix} suffix={suffix} />
           </span>
-          {typeof change === "number" && change !== 0 && (
+          {/* change가 있으면 change 기반 화살표만 표시, 없으면 shouldShowArrow 기반 화살표 표시 */}
+          {typeof change === "number" && change !== 0 ? (
             <span
               className={`text-xs font-bold px-1 rounded-sm ml-1 ${
                 change > 0 ? "text-green-400" : "text-red-400"
@@ -303,8 +304,7 @@ function StatItem({
             >
               {change > 0 ? "▲" : "▼"}
             </span>
-          )}
-          {shouldShowArrow && (
+          ) : shouldShowArrow ? (
             <span 
               className={`text-xs font-bold transition-all duration-300 ${
                 isIncreased ? "text-green-500" : isDecreased ? "text-red-500" : ""
@@ -315,7 +315,7 @@ function StatItem({
             >
               {isIncreased ? "▲" : isDecreased ? "▼" : ""}
             </span>
-          )}
+          ) : null}
         </div>
       </div>
       
@@ -740,6 +740,7 @@ export default function Home() {
   const prevDiplomacyDataRef = useRef<DiplomacyRelation[]>([]);
   const prevMilitaryDataRef = useRef<MilitaryUnit[]>([]);
   const commandLogsScrollRef = useRef<HTMLDivElement>(null);
+  const [territories, setTerritories] = useState<Array<{id: string; name: string; owner: "goguryeo" | "baekje" | "silla" | "neutral"}>>([]);
 
   const nationInfo = {
     goguryeo: {
@@ -1015,6 +1016,24 @@ export default function Home() {
           }
         } catch (militaryError) {
           console.warn("군사 데이터 업데이트 실패:", militaryError);
+        }
+        
+        // 영토 소유권 데이터 가져오기
+        try {
+          const sessionToken = localStorage.getItem("session_token");
+          if (sessionToken) {
+            const territoriesResponse = await fetch(`${apiUrl}/api/territories?session_token=${encodeURIComponent(sessionToken)}`);
+            if (territoriesResponse.ok) {
+              const territoriesData = await territoriesResponse.json() as Array<{id: number; name: string; owner: string}>;
+              setTerritories(territoriesData.map(t => ({
+                id: String(t.id),
+                name: t.name,
+                owner: (t.owner === "goguryeo" || t.owner === "baekje" || t.owner === "silla" ? t.owner : "neutral") as "goguryeo" | "baekje" | "silla" | "neutral"
+              })));
+            }
+          }
+        } catch (territoriesError) {
+          console.warn("영토 데이터 업데이트 실패:", territoriesError);
         }
       }
     } catch (error) {
@@ -1367,6 +1386,35 @@ export default function Home() {
               clearTimeout(militaryTimeoutId);
               console.warn("군사 데이터 로드 실패:", militaryError);
             }
+            
+            // 영토 소유권 데이터 가져오기
+            const territoriesController = new AbortController();
+            const territoriesTimeoutId = setTimeout(() => territoriesController.abort(), 5000);
+            
+            try {
+              const sessionToken = localStorage.getItem("session_token");
+              if (!sessionToken) {
+                throw new Error("세션 토큰이 없습니다.");
+              }
+              
+              const territoriesResponse = await fetch(`${apiUrl}/api/territories?session_token=${encodeURIComponent(sessionToken)}`, {
+                signal: territoriesController.signal,
+              });
+              
+              clearTimeout(territoriesTimeoutId);
+              
+              if (territoriesResponse.ok) {
+                const territoriesData = await territoriesResponse.json() as Array<{id: number; name: string; owner: string}>;
+                setTerritories(territoriesData.map(t => ({
+                  id: t.id,
+                  name: t.name,
+                  owner: (t.owner === "goguryeo" || t.owner === "baekje" || t.owner === "silla" ? t.owner : "neutral") as "goguryeo" | "baekje" | "silla" | "neutral"
+                })));
+              }
+            } catch (territoriesError) {
+              clearTimeout(territoriesTimeoutId);
+              console.warn("영토 데이터 로드 실패:", territoriesError);
+            }
           } catch (statusError) {
             clearTimeout(timeoutId);
             if (statusError instanceof Error) {
@@ -1683,6 +1731,7 @@ export default function Home() {
                 financeIncrease={financeIncrease} 
                 selectedNation={selectedNation}
                 nationScores={allNationScores}
+                territories={territories}
               />
             </div>
           </div>
