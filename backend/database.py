@@ -1,8 +1,11 @@
 from sqlmodel import create_engine, SQLModel, Session
 import os
 
-# SQLite 데이터베이스 설정 (Alembic과 동일 경로 사용)
-sqlite_url = "sqlite:///backend/game.db"
+# SQLite 데이터베이스 설정
+# backend 디렉토리에 DB 파일을 고정 위치로 생성
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DB_PATH = os.path.join(BASE_DIR, "game.db")
+sqlite_url = f"sqlite:///{DB_PATH}"
 engine = create_engine(
     sqlite_url,
     connect_args={"check_same_thread": False},

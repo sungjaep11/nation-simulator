@@ -120,6 +120,57 @@ const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
   const selectSoundRef = useRef<HTMLAudioElement>(null);
   const transitionTimerRef = useRef<NodeJS.Timeout | null>(null);
 
+  // 이미 선택한 국가가 있으면 홈으로 리다이렉트
+  useEffect(() => {
+    const checkExistingGameData = async () => {
+      const sessionToken = localStorage.getItem("session_token");
+      if (!sessionToken) {
+        // 세션 토큰이 없으면 로그인 페이지로
+        router.push("/login");
+        return;
+      }
+
+      const email = localStorage.getItem("email");
+      if (!email) {
+        return;
+      }
+      const storedCountry = localStorage.getItem(`selected_country:${email}`);
+      if (!storedCountry || !["goguryeo", "baekje", "silla"].includes(storedCountry)) {
+        // 선택 기록이 없으면 선택 화면 유지
+        return;
+      }
+
+      try {
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+        const response = await fetch(`${apiUrl}/api/countries?session_token=${encodeURIComponent(sessionToken)}`);
+        
+        if (response.ok) {
+          const countries = await response.json();
+          // 저장된 국가가 유효하면 해당 국가로 이동
+          if (countries && Array.isArray(countries)) {
+            const hasStoredCountry = countries.some(
+              (country) => country?.id === storedCountry
+            );
+            if (hasStoredCountry) {
+              router.push(`/home?country=${storedCountry}`);
+              return;
+            }
+          }
+        } else if (response.status === 401) {
+          // 인증 오류면 로그인 페이지로
+          router.push("/login");
+          return;
+        }
+        // 국가가 없거나 오류가 발생하면 기존 선택 화면 표시
+      } catch (error) {
+        // 네트워크 오류 등은 조용히 처리하고 선택 화면 표시
+        // (백엔드 서버가 실행되지 않았을 수도 있음)
+      }
+    };
+
+    checkExistingGameData();
+  }, [router]);
+
   // 비디오 자동 재생
   useEffect(() => {
     if (videoPhase === 'dystopia' && dystopiaVideoRef.current) {
@@ -262,6 +313,10 @@ const handleSelectCountry = (countryId: string) => {
     
     setIsExiting(true);
     setTimeout(() => {
+      const email = localStorage.getItem("email");
+      if (email) {
+        localStorage.setItem(`selected_country:${email}`, selectedCountry);
+      }
       router.push(`/home?country=${selectedCountry}`);
     }, 500);
   };
@@ -603,12 +658,14 @@ const handleSelectCountry = (countryId: string) => {
                     borderColor: `${country.color}80`,
                     borderWidth: '2px',
                     boxShadow: `0 8px 32px 0 rgba(0, 0, 0, 0.37), 0 0 20px ${country.color}40`,
+                    minWidth: 'clamp(280px, 25vw, 350px)',
                   } : {
                     padding: 'clamp(0.75rem, 1.5vw, 1rem)',
                     backgroundColor: 'rgba(26, 26, 26, 0.1)',
                     borderColor: 'rgba(255, 255, 255, 0.18)',
                     borderWidth: '1px',
                     boxShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.37)',
+                    minWidth: 'clamp(280px, 25vw, 350px)',
                   }}
                 >
                   {/* Glassmorphism overlay */}
@@ -660,11 +717,13 @@ const handleSelectCountry = (countryId: string) => {
                     </p>
 
                     <span
-                      className="inline-block rounded-full mb-2"
+                      className="inline-block rounded-full mb-2 px-3 py-1"
                       style={{
                         color: country.color,
                         border: `1px solid ${country.color}60`,
                         background: `${country.color}20`,
+                        fontSize: 'clamp(0.75rem, 1.5vw, 0.875rem)',
+                        whiteSpace: 'nowrap',
                       }}
                     >
                       {country.feature}
