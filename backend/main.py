@@ -213,6 +213,9 @@ def check_spy_intelligence_leak(country_id: str, session: Session) -> dict:
     스파이 정보 유출 체크
     모든 스파이는 동일한 확률(3%)로 정보 유출 가능
     
+    Args:
+        country_id: user_specific_country_id (예: 'goguryeo_1')
+    
     Returns:
         leaked_intel: 유출된 비밀 정보 목록
     """
@@ -221,10 +224,11 @@ def check_spy_intelligence_leak(country_id: str, session: Session) -> dict:
     leaked_intel = {}
     
     # 이 국가의 모든 스파이 검색
+    # Fix: country_id should already be user_specific_country_id
     # SQLModel columns support .in_() method - type checker limitation, works at runtime
     spy_units = session.exec(
         select(MilitaryUnit).where(
-            (MilitaryUnit.countryID == country_id) & 
+            (MilitaryUnit.countryID == country_id) &  # Fix: This now correctly uses user_specific_country_id
             (MilitaryUnit.unit_type.in_(["spy", "assassin", "scout", "infiltrator"]))  # type: ignore
         )
     ).all()
@@ -241,7 +245,7 @@ def check_spy_intelligence_leak(country_id: str, session: Session) -> dict:
                 # 정보 유출 발생
                 secrets = session.exec(
                     select(SecretIntelligence).where(
-                        SecretIntelligence.countryID == country_id
+                        SecretIntelligence.countryID == country_id  # Fix: This now correctly uses user_specific_country_id
                     )
                 ).all()
                 
@@ -1100,10 +1104,15 @@ async def handle_game_turn(
     country.last_military_change = changes.get('military', 0)
     country.last_happiness_change = changes.get('happiness', 0)
     
+    # Check if there's an add_military action to avoid double counting
+    has_military_action = any(a.get('type') == 'add_military' for a in actions)
+    
     # 스탯에 변화값 적용
     country.finance += changes.get('finance', 0)
     country.population += changes.get('population', 0)
-    country.military += changes.get('military', 0)
+    # Fix: Don't add military from changes if there's an add_military action (prevent double counting)
+    if not has_military_action:
+        country.military += changes.get('military', 0)
     country.happiness += changes.get('happiness', 0)
     
     # 행복도 100% 제한, 군사력 최소값 0 제한
@@ -1119,7 +1128,7 @@ async def handle_game_turn(
     secret_text = "\n".join(ai_data.get('secret_news', []) or [])
     command_response_text = secret_text if secret_text else ai_data.get('scenario', '')
     command_log = CommandLog(
-        countryID=country_id,
+        countryID=user_specific_country_id,  # Fix: Use user_specific_country_id
         command=user_input,
         response=command_response_text,
         timestamp=datetime.utcnow()
@@ -1131,7 +1140,7 @@ async def handle_game_turn(
     for news_text in ai_data.get('public_news', []):
         news_type = categorize_news(news_text)
         news_item = NewsItem(
-            countryID=country_id,
+            countryID=user_specific_country_id,  # Fix: Use user_specific_country_id
             title=news_title_for_type(news_type),
             content=news_text,
             type=news_type,
@@ -1147,7 +1156,7 @@ async def handle_game_turn(
     # 비밀 뉴스 저장 (공개 안 됨)
     for news_text in ai_data.get('secret_news', []):
         news_item = NewsItem(
-            countryID=country_id,
+            countryID=user_specific_country_id,  # Fix: Use user_specific_country_id
             title=news_text,
             content=news_text,
             type="secret",
@@ -1172,7 +1181,7 @@ async def handle_game_turn(
                 unit_count = inferred if inferred > 0 else 1
             
             stmt = select(MilitaryUnit).where(
-                (MilitaryUnit.countryID == country_id) & 
+                (MilitaryUnit.countryID == user_specific_country_id) &  # Fix: Use user_specific_country_id
                 (MilitaryUnit.name == unit_name)
             )
             existing_unit = session.exec(stmt).first()
@@ -1181,7 +1190,7 @@ async def handle_game_turn(
                 existing_unit.count += unit_count
             else:
                 new_unit = MilitaryUnit(
-                    countryID=country_id,
+                    countryID=user_specific_country_id,  # Fix: Use user_specific_country_id
                     name=unit_name,
                     count=unit_count,
                     icon=unit_icon,
@@ -1189,6 +1198,7 @@ async def handle_game_turn(
                 )
                 session.add(new_unit)
             # 군사력은 모집한 병력 수만큼 증가 (정규/스파이 구분 없이 반영)
+            # Fix: This is the only place military should be added when add_military action exists
             country.military += unit_count
         
         elif action_type == 'diplomacy':
@@ -1202,7 +1212,7 @@ async def handle_game_turn(
             favorability = action.get('favorability', 15)
             
             stmt = select(Diplomacy).where(
-                (Diplomacy.sourceID == country_id) & 
+                (Diplomacy.sourceID == user_specific_country_id) &  # Fix: Use user_specific_country_id
                 (Diplomacy.targetName == target_name)
             )
             existing_diplomacy = session.exec(stmt).first()
@@ -1212,7 +1222,7 @@ async def handle_game_turn(
                 existing_diplomacy.favorability = max(-100, min(100, existing_diplomacy.favorability + favorability))
             else:
                 new_diplomacy = Diplomacy(
-                    sourceID=country_id,
+                    sourceID=user_specific_country_id,  # Fix: Use user_specific_country_id
                     targetName=target_name,
                     status=status,
                     favorability=max(-100, min(100, favorability))
@@ -1228,7 +1238,7 @@ async def handle_game_turn(
             target_country = action.get('target_country', '')
             
             secret_intel = SecretIntelligence(
-                countryID=country_id,
+                countryID=user_specific_country_id,  # Fix: Use user_specific_country_id
                 title=title,
                 content=content,
                 intelligence_type=operation_type
@@ -1247,7 +1257,7 @@ async def handle_game_turn(
             # 전쟁 뉴스 저장
             war_news = f"{current_stats.get('name', '')}와 {target_country_name}의 전쟁 발발! 결과: {outcome}"
             news_item = NewsItem(
-                countryID=country_id,
+                countryID=user_specific_country_id,  # Fix: Use user_specific_country_id
                 title="전쟁",
                 content=war_news,
                 type="war",
@@ -1464,41 +1474,67 @@ async def update_diplomacy(
     target_name: str = Body(..., embed=True),
     status: str = Body(..., embed=True),
     favorability: int = Body(0, embed=True),
+    session_token: str = Body(..., embed=True),
     session: Session = Depends(get_session)
 ):
     """외교 관계 업데이트"""
-    # neutral을 중립으로 통일
-    if status == 'neutral':
-        status = '중립'
-    
-    # 기존 외교 관계 찾기
-    statement = select(Diplomacy).where(
-        (Diplomacy.sourceID == country_id) & 
-        (Diplomacy.targetName == target_name)
-    )
-    diplomacy = session.exec(statement).first()
-    
-    if diplomacy:
-        diplomacy.status = status
-        diplomacy.favorability = favorability
-    else:
-        diplomacy = Diplomacy(
-            sourceID=country_id,
-            targetName=target_name,
-            status=status,
-            favorability=favorability
+    try:
+        # 세션 토큰에서 사용자 ID 추출
+        token_payload = verify_session_token(session_token)
+        user_id = token_payload.get("user_id")
+        
+        if not user_id:
+            raise HTTPException(status_code=401, detail="유효하지 않은 세션 토큰입니다.")
+        
+        # 프론트엔드에서 받은 country_id를 사용자별 고유 ID로 변환
+        user_specific_country_id = f"{country_id}_{user_id}"
+        
+        # 해당 사용자의 국가인지 확인
+        country = session.exec(
+            select(Country).where(
+                (Country.id == user_specific_country_id) & (Country.user_id == user_id)
+            )
+        ).first()
+        
+        if not country:
+            raise HTTPException(status_code=404, detail="국가를 찾을 수 없습니다.")
+        
+        # neutral을 중립으로 통일
+        if status == 'neutral':
+            status = '중립'
+        
+        # 기존 외교 관계 찾기
+        statement = select(Diplomacy).where(
+            (Diplomacy.sourceID == user_specific_country_id) &  # Fix: Use user_specific_country_id
+            (Diplomacy.targetName == target_name)
         )
-        session.add(diplomacy)
-    
-    session.commit()
-    session.refresh(diplomacy)
-    
-    return {
-        "id": diplomacy.id,
-        "targetName": diplomacy.targetName,
-        "status": "중립" if diplomacy.status == "neutral" else diplomacy.status,
-        "favorability": diplomacy.favorability
-    }
+        diplomacy = session.exec(statement).first()
+        
+        if diplomacy:
+            diplomacy.status = status
+            diplomacy.favorability = favorability
+        else:
+            diplomacy = Diplomacy(
+                sourceID=user_specific_country_id,  # Fix: Use user_specific_country_id
+                targetName=target_name,
+                status=status,
+                favorability=favorability
+            )
+            session.add(diplomacy)
+        
+        session.commit()
+        session.refresh(diplomacy)
+        
+        return {
+            "id": diplomacy.id,
+            "targetName": diplomacy.targetName,
+            "status": "중립" if diplomacy.status == "neutral" else diplomacy.status,
+            "favorability": diplomacy.favorability
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"외교 관계 업데이트 중 오류가 발생했습니다: {str(e)}")
 
 @app.post("/api/country/{country_id}/military")
 async def add_military_unit(
@@ -1506,39 +1542,63 @@ async def add_military_unit(
     name: str = Body(..., embed=True),
     count: int = Body(..., embed=True),
     icon: str = Body("", embed=True),
+    session_token: str = Body(..., embed=True),
     session: Session = Depends(get_session)
 ):
     """군대 유닛 추가"""
-    # 기존 유닛 찾기
-    statement = select(MilitaryUnit).where(
-        (MilitaryUnit.countryID == country_id) & 
-        (MilitaryUnit.name == name)
-    )
-    unit = session.exec(statement).first()
-    
-    if unit:
-        unit.count += count
-    else:
-        unit = MilitaryUnit(
-            countryID=country_id,
-            name=name,
-            count=count,
-            icon=icon
+    try:
+        # 세션 토큰에서 사용자 ID 추출
+        token_payload = verify_session_token(session_token)
+        user_id = token_payload.get("user_id")
+        
+        if not user_id:
+            raise HTTPException(status_code=401, detail="유효하지 않은 세션 토큰입니다.")
+        
+        # 프론트엔드에서 받은 country_id를 사용자별 고유 ID로 변환
+        user_specific_country_id = f"{country_id}_{user_id}"
+        
+        # 해당 사용자의 국가인지 확인
+        country = session.exec(
+            select(Country).where(
+                (Country.id == user_specific_country_id) & (Country.user_id == user_id)
+            )
+        ).first()
+        
+        if not country:
+            raise HTTPException(status_code=404, detail="국가를 찾을 수 없습니다.")
+        
+        # 기존 유닛 찾기
+        statement = select(MilitaryUnit).where(
+            (MilitaryUnit.countryID == user_specific_country_id) &  # Fix: Use user_specific_country_id
+            (MilitaryUnit.name == name)
         )
-        session.add(unit)
-
-    # 스파이 계열이면 군사력 증가
-    country = session.exec(select(Country).where(Country.id == country_id)).first()
-    if country:
+        unit = session.exec(statement).first()
+        
+        if unit:
+            unit.count += count
+        else:
+            unit = MilitaryUnit(
+                countryID=user_specific_country_id,  # Fix: Use user_specific_country_id
+                name=name,
+                count=count,
+                icon=icon
+            )
+            session.add(unit)
+        
+        # 스파이 계열이면 군사력 증가
         adjust_military_for_spy(country, unit.unit_type, count)
         country.update_total_score()
-    
-    session.commit()
-    session.refresh(unit)
-    
-    return {
-        "id": unit.id,
-        "name": unit.name,
-        "count": unit.count,
-        "icon": unit.icon
-    }
+        
+        session.commit()
+        session.refresh(unit)
+        
+        return {
+            "id": unit.id,
+            "name": unit.name,
+            "count": unit.count,
+            "icon": unit.icon
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"군대 유닛 추가 중 오류가 발생했습니다: {str(e)}")

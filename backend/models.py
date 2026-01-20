@@ -30,11 +30,13 @@ class Country(SQLModel, table=True):
         - 인구: 1000당 1점
         - 군사력: 1당 100점
         - 행복도: 1당 10점
+        
+        Fix: Updated to match README.md formula
         """
         score = (
             (self.finance // 100) +
-            (self.population // 100) +
-            (self.military * 50) +
+            (self.population // 1000) +  # Fix: Changed from // 100 to // 1000 to match README
+            (self.military * 100) +  # Fix: Changed from * 50 to * 100 to match README
             (self.happiness * 10)
         )
         return score

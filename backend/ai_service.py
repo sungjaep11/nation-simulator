@@ -52,11 +52,17 @@ def _generate_text(prompt: str, model_name: str = AI_MODEL) -> str:
     client = _get_client()
     if _GENAI_LIB == "google.genai":
         response = client.models.generate_content(model=model_name, contents=prompt)
-        return response.text
+        text = response.text
+        if not text:
+            raise RuntimeError("Gemini API returned empty or None response text")
+        return str(text)
     elif _GENAI_LIB == "google.generativeai":
-        model = client.GenerativeModel(model_name)
+        model = client.GenerativeModel(model_name)  # type: ignore
         response = model.generate_content(prompt)
-        return response.text
+        text = response.text
+        if not text:
+            raise RuntimeError("Gemini API returned empty or None response text")
+        return str(text)
     else:
         raise RuntimeError("Unsupported Gemini client configuration")
 
@@ -65,14 +71,18 @@ def _is_retryable_error(msg: str) -> bool:
     return any(key in lower for key in ["429", "resource_exhausted", "quota", "rate limit", "too many requests", "503", "unavailable", "overloaded"])
 
 async def _generate_text_with_retry(prompt: str, model_name: str = AI_MODEL, retries: int = 2, base_delay: float = 1.5) -> str:
+    last_exception: Exception | None = None
     for attempt in range(retries + 1):
         try:
             return _generate_text(prompt, model_name)
         except Exception as e:
+            last_exception = e
             if attempt < retries and _is_retryable_error(str(e)):
                 await asyncio.sleep(base_delay * (2 ** attempt))
                 continue
             raise
+    # Type checker fallback (should never be reached)
+    raise last_exception if last_exception else RuntimeError("Failed to generate text after retries")
 
 def _get_mock_response(user_input: str, current_stats: dict) -> dict:
     """Return mock response for testing/quota limits"""
@@ -170,7 +180,8 @@ async def get_gemini_game_data(user_input: str, current_stats: dict, all_countri
 - add_military: {{"type": "add_military", "name": "군대명", "count": 수량, "icon": "아이콘", "unit_type": "regular/spy"}}
   * 반드시 생성하면 finance에서 비용 공제 필수
   * name은 구체적으로: "철기병", "궁병", "첩자", "생화학무기", "암살단" 등
-- diplomacy: {{"type": "diplomacy", "target": "국가명", "status": "동맹/중립/적대", "favorability": -20~50}}
+   - diplomacy: {{"type": "diplomacy", "target": "국가명", "status": "동맹/중립/적대", "favorability": -20~50}}
+     * status는 반드시 한글로: "동맹", "중립", "적대" (영문 "neutral" 사용 금지)
   * 50% 확률로 성공/실패
 - secret_operation: {{"type": "secret_operation", "title": "작전명", "content": "내용", "operation_type": "암살/스파이/선동", "target_country": "목표국가"}}
 
@@ -273,37 +284,42 @@ async def get_ai_country_turn(country_stats: dict, all_countries: dict) -> dict:
 
 ### AI 전략 지침 ###
 1. 자율적 의사결정:
-   - **매 턴마다 적극적으로 행동하세요 (전쟁, 외교, 군사 증강 중 최소 1개 필수)**
-   - 약한 국가가 있으면 도발하거나 침략 고려 (50% 이상 확률로 전쟁 시작)
-   - 외교 관계에 따라 동맹 또는 배신 결정 (배신은 10%의 확률)
-   - 군사력이 우위면 즉시 전쟁 시작
-   - **전쟁 시작 시 반드시 전면전으로 처리 (소규모 충돌 금지)**
+   - **균형잡힌 발전을 추구하세요. 매 턴마다 무조건 큰 액션을 할 필요는 없습니다.**
+   - 상황에 따라 내정, 외교, 군사 증강 중 적절히 선택 (모든 턴에 액션 필수 아님)
+   - 약한 국가가 있으면 도발 고려하되, 무리한 전쟁은 피하세요
+   - 외교 관계에 따라 동맹 또는 협력 결정 (배신은 5%의 확률로만)
+   - 군사력이 크게 우위일 때만 전쟁 고려
+   - **전쟁은 소규모 충돌부터 시작 가능 (전면전만 강제하지 않음)**
 
-2. 수치 설정:
-   - 적극적인 명령(전쟁, 개혁, 건설): 큰 변화 (finance/population: -100~100, happiness, military: -10~10)
-   - 소극적인 명령(내정, 평화): 작은 변화 (finance/population: -20~20, happiness, military: -5~5)
-   - 군사 증강: military 1~5 증가, finance 감소
+2. 수치 설정 (플레이어 국가와 유사한 규모 유지):
+   - 적극적인 행동(전쟁, 개혁, 건설): 중간 변화 (finance/population: -50~50, happiness, military: -3~5)
+   - 소극적인 행동(내정, 평화): 작은 변화 (finance/population: -20~20, happiness, military: -2~2)
+   - 군사 증강: military 1~3 증가, finance 적절히 감소
    - 외교: happiness, favorability 변화
    - 실패/저항: 음수 변화
+   - **중요: 플레이어 국가의 진행 속도와 유사한 수준의 변화를 유지하세요. 과도하게 큰 변화는 피하세요.**
 
 3. 다양한 Mood 생성 (균형있게):
-   - happy (30%): 전쟁 승리, 영토 확장, 외교 성공, 경제 호황
-   - neutral (40%): 평상시 운영, 소극적 외교, 정상적 발전
-   - angry (20%): 전쟁 패배, 침략당함, 동맹 깨짐, 경제 위기
+   - happy (25%): 전쟁 승리, 영토 확장, 외교 성공, 경제 호황
+   - neutral (50%): 평상시 운영, 소극적 외교, 정상적 발전, 내정 집중
+   - angry (15%): 전쟁 패배, 침략당함, 동맹 깨짐, 경제 위기
    - depressed (10%): 큰 손실, 영토 상실, 멸망 위기
 
-4. 액션 선택 (적극적으로):
-   - add_military: 군력이 약하면 자주 (50% 이상 생성), **유닛명을 구체적으로 (철기병, 궁병, 첩자 등)**
-   - war: **군력이 우수하면 반드시 전쟁 시작. outcome은 50% 확률로 승리/패배. land_gained/land_lost는 최소 3~10 영토**
-   - diplomacy: **50% 확률로 성공(favorability +30~50) 또는 실패(favorability -10~20)**
-   - secret_operation: 도발, 암살, 스파이 활동
+4. 액션 선택 (균형있게):
+   - add_military: 군력이 약하면 가끔 생성 (30% 확률), **유닛명을 구체적으로 (철기병, 궁병, 첩자 등), 수량은 20~50명 정도로 제한**
+   - war: **정당한 이유가 있을 때만 전쟁 시작. outcome은 50% 확률로 승리/패배. land_gained/land_lost는 1~5 영토 (플레이어와 유사한 규모)**
+   - diplomacy: **50% 확률로 성공(favorability +20~30) 또는 실패(favorability -10~15), status는 반드시 한글 "동맹", "중립", "적대" 사용**
+   - secret_operation: 가끔 사용 (10% 확률)
+   - **액션은 선택적입니다. 매 턴마다 액션이 필요하지 않습니다. 내정에 집중하는 턴도 정상적입니다.**
 
-5. **게임 진행 가속화 (중요!)**:
-   - 명령 준수 우선: actions는 반드시 [유저 명령]에 명시된 활동을 우선적으로 반영해야 합니다. 유저가 전쟁을 언급하지 않았다면, 정당한 이유(타국의 선제공격 등) 없이 war 액션을 생성하지 마세요.
+5. **균형잡힌 게임 진행 (중요!)**:
+   - 플레이어 국가의 진행 속도와 유사한 수준을 유지하세요
    - 인과관계의 명확성: 모든 수치 변화(changes)와 액션(actions)은 앞서 작성한 scenario와 논리적으로 일치해야 합니다.
-   - 선택적 액션: 유저의 명령이 단순하다면 actions 배열은 비어있을 수 있습니다. 억지로 전쟁이나 대규모 액션을 끼워 넣지 마세요.
+   - 선택적 액션: actions 배열은 비어있을 수 있습니다. 억지로 전쟁이나 대규모 액션을 끼워 넣지 마세요.
    - 외교는 정확히 50% 확률로 성공/실패
-   - 군사 증강 시 최소 50명 이상 모집
+   - 군사 증강 시 20~50명 정도로 제한 (과도한 증강 금지)
+   - 전쟁 casualties는 50~200명 정도로 제한 (플레이어와 유사한 규모)
+   - **중요: 이 함수는 AI가 자율적으로 운영하는 국가의 턴을 처리합니다. 유저 명령과는 무관합니다.**
 
 응답 JSON 형식:
 {{
@@ -315,11 +331,12 @@ async def get_ai_country_turn(country_stats: dict, all_countries: dict) -> dict:
         "경제 정책 발표"
     ],
     "secret_news": ["비밀 작전, 전쟁 계획 등"],
-    "changes": {{"finance": 100, "population": 50, "military": 1, "happiness": 5}},
+    "changes": {{"finance": 30, "population": 25, "military": 1, "happiness": 2}},
     "actions": [
-        {{"type": "add_military", "name": "철기병", "count": 100, "icon": "🐎", "unit_type": "regular"}},
-        {{"type": "war", "target": "약한_국가명", "outcome": "승리", "land_gained": 5, "land_lost": 0, "casualties": 200}},
-        {{"type": "diplomacy", "target": "국가명", "status": "동맹", "favorability": 40}}
+        {{"type": "add_military", "name": "철기병", "count": 30, "icon": "🐎", "unit_type": "regular"}},
+        {{"type": "war", "target": "약한_국가명", "outcome": "승리", "land_gained": 3, "land_lost": 0, "casualties": 100}},
+        {{"type": "diplomacy", "target": "국가명", "status": "동맹", "favorability": 25}}
+     * status는 반드시 한글 "동맹", "중립", "적대" 중 하나 사용
     ]
 }}
         """
@@ -348,6 +365,6 @@ async def get_ai_country_turn(country_stats: dict, all_countries: dict) -> dict:
             "mood": "neutral",
             "public_news": ["안정적인 발전 중"],
             "secret_news": [],
-            "changes": {"finance": 100, "population": 50, "military": 0, "happiness": 1},
+            "changes": {"finance": 20, "population": 15, "military": 0, "happiness": 1},
             "actions": []
         }
