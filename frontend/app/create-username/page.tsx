@@ -137,9 +137,6 @@ export default function CreateUsernamePage() {
                 maxLength={20}
                 autoFocus
               />
-              <p className="mt-2 text-xs text-[#A89F91]">
-                게임에서 표시될 이름입니다. 나중에 변경할 수 있습니다.
-              </p>
             </div>
 
             <button
