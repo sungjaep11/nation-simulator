@@ -752,6 +752,7 @@ export default function Home() {
         "강력한 군사력과 광활한 영토를 자랑하는 북방의 패자. 철기병과 산성 전술로 유명하다.",
       flag: "🏔️",
       color: "#DC143C",
+      endingMessage: "북방의 패자, 고구려가 한반도를 통일했다.\n그대가 철기병의 위력과 산성의 견고함으로\n천하를 하나로 묶은 대업이 완성되었다.",
     },
     baekje: {
       name: "백제",
@@ -759,6 +760,7 @@ export default function Home() {
         "해상 무역과 문화 예술이 발달한 서남부의 강국. 일본, 중국과의 교류가 활발하다.",
       flag: "🌊",
       color: "#1E90FF",
+      endingMessage: "해상의 제국, 백제가 한반도를 통일했다.\n그대가 무역과 문화의 힘으로\n삼국을 하나로 묶은 대업이 완성되었다.",
     },
     silla: {
       name: "신라",
@@ -766,6 +768,7 @@ export default function Home() {
         "화랑도의 정신과 단결력으로 무장한 동남부의 신흥 강국. 금관가야를 흡수하며 성장 중이다.",
       flag: "👑",
       color: "#FFD700",
+      endingMessage: "화랑도의 나라, 신라가 한반도를 통일했다.\n그대가 단결과 화합의 힘으로\n삼국을 하나로 묶은 대업이 완성되었다.",
     },
   };
 
@@ -1028,11 +1031,48 @@ export default function Home() {
             const territoriesResponse = await fetch(`${apiUrl}/api/territories?session_token=${encodeURIComponent(sessionToken)}`);
             if (territoriesResponse.ok) {
               const territoriesData = await territoriesResponse.json() as Array<{id: number; name: string; owner: string}>;
-              setTerritories(territoriesData.map(t => ({
+              const newTerritories = territoriesData.map(t => ({
                 id: String(t.id),
                 name: t.name,
                 owner: (t.owner === "goguryeo" || t.owner === "baekje" || t.owner === "silla" ? t.owner : "neutral") as "goguryeo" | "baekje" | "silla" | "neutral"
-              })));
+              }));
+              setTerritories(newTerritories);
+              
+              // 정복된 나라 확인 및 스탯 0으로 설정
+              const conqueredNations: NationId[] = [];
+              const allNations: NationId[] = ["goguryeo", "baekje", "silla"];
+              
+              allNations.forEach((nation) => {
+                const hasTerritory = newTerritories.some(t => t.owner === nation);
+                if (!hasTerritory) {
+                  conqueredNations.push(nation);
+                }
+              });
+              
+              // 정복된 나라의 스탯을 0으로 설정
+              if (conqueredNations.length > 0) {
+                setAllNationStats((prevStats) => {
+                  const updatedStats = { ...prevStats };
+                  conqueredNations.forEach((nation) => {
+                    updatedStats[nation] = {
+                      finance: 0,
+                      population: 0,
+                      happiness: 0,
+                      military: 0,
+                    };
+                  });
+                  return updatedStats;
+                });
+                
+                // 정복된 나라의 점수도 0으로 설정
+                setAllNationScores((prevScores) => {
+                  const updatedScores = { ...prevScores };
+                  conqueredNations.forEach((nation) => {
+                    updatedScores[nation] = 0;
+                  });
+                  return updatedScores;
+                });
+              }
             }
           }
         } catch (territoriesError) {
@@ -1408,11 +1448,48 @@ export default function Home() {
               
               if (territoriesResponse.ok) {
                 const territoriesData = await territoriesResponse.json() as Array<{id: number; name: string; owner: string}>;
-                setTerritories(territoriesData.map(t => ({
+                const newTerritories = territoriesData.map(t => ({
                   id: String(t.id),
                   name: t.name,
                   owner: (t.owner === "goguryeo" || t.owner === "baekje" || t.owner === "silla" ? t.owner : "neutral") as "goguryeo" | "baekje" | "silla" | "neutral"
-                })));
+                }));
+                setTerritories(newTerritories);
+                
+                // 정복된 나라 확인 및 스탯 0으로 설정
+                const conqueredNations: NationId[] = [];
+                const allNations: NationId[] = ["goguryeo", "baekje", "silla"];
+                
+                allNations.forEach((nation) => {
+                  const hasTerritory = newTerritories.some(t => t.owner === nation);
+                  if (!hasTerritory) {
+                    conqueredNations.push(nation);
+                  }
+                });
+                
+                // 정복된 나라의 스탯을 0으로 설정
+                if (conqueredNations.length > 0) {
+                  setAllNationStats((prevStats) => {
+                    const updatedStats = { ...prevStats };
+                    conqueredNations.forEach((nation) => {
+                      updatedStats[nation] = {
+                        finance: 0,
+                        population: 0,
+                        happiness: 0,
+                        military: 0,
+                      };
+                    });
+                    return updatedStats;
+                  });
+                  
+                  // 정복된 나라의 점수도 0으로 설정
+                  setAllNationScores((prevScores) => {
+                    const updatedScores = { ...prevScores };
+                    conqueredNations.forEach((nation) => {
+                      updatedScores[nation] = 0;
+                    });
+                    return updatedScores;
+                  });
+                }
               }
             } catch (territoriesError) {
               clearTimeout(territoriesTimeoutId);
@@ -1473,6 +1550,46 @@ export default function Home() {
       });
     }
   }, [mounted, showEnding]);
+
+  // 정복된 나라 확인 및 스탯 0으로 설정
+  useEffect(() => {
+    if (territories.length === 0) return;
+    
+    const conqueredNations: NationId[] = [];
+    const allNations: NationId[] = ["goguryeo", "baekje", "silla"];
+    
+    allNations.forEach((nation) => {
+      const hasTerritory = territories.some(t => t.owner === nation);
+      if (!hasTerritory) {
+        conqueredNations.push(nation);
+      }
+    });
+    
+    // 정복된 나라의 스탯을 0으로 설정
+    if (conqueredNations.length > 0) {
+      setAllNationStats((prevStats) => {
+        const updatedStats = { ...prevStats };
+        conqueredNations.forEach((nation) => {
+          updatedStats[nation] = {
+            finance: 0,
+            population: 0,
+            happiness: 0,
+            military: 0,
+          };
+        });
+        return updatedStats;
+      });
+      
+      // 정복된 나라의 점수도 0으로 설정
+      setAllNationScores((prevScores) => {
+        const updatedScores = { ...prevScores };
+        conqueredNations.forEach((nation) => {
+          updatedScores[nation] = 0;
+        });
+        return updatedScores;
+      });
+    }
+  }, [territories]);
 
   // 엔딩 조건 체크: 모든 다른 나라가 정복되었는지 확인
   useEffect(() => {
@@ -1577,25 +1694,66 @@ export default function Home() {
       {/* 엔딩 영상 오버레이 */}
       {showEnding && selectedNation && (
         <div 
-          className="fixed inset-0 z-[9999] bg-black"
+          className="fixed inset-0 z-[9999] bg-black flex items-center justify-center overflow-hidden"
           style={{ 
             opacity: endingVideoFaded ? 1 : 1,
             transition: endingVideoFaded ? 'opacity 2s ease-in-out' : 'none'
           }}
         >
           {!endingVideoFaded && (
-            <video
-              ref={endingVideoRef}
-              src={getEndingVideoPath(selectedNation)}
-              className="w-full h-full object-contain"
-              onEnded={() => {
-                setEndingVideoFaded(true);
-              }}
+            <>
+              {/* 상단 검은색 테두리 */}
+              <div className="absolute top-0 left-0 right-0 h-16 bg-black z-20" />
+              
+              <video
+                ref={endingVideoRef}
+                src={getEndingVideoPath(selectedNation)}
+                className="absolute inset-0 w-full h-full object-cover pointer-events-none"
+                onEnded={() => {
+                  setEndingVideoFaded(true);
+                }}
+                style={{
+                  opacity: 1,
+                  transition: 'opacity 2s ease-in-out',
+                }}
+              />
+              
+              {/* 하단 검은색 테두리 */}
+              <div className="absolute bottom-0 left-0 right-0 h-16 bg-black z-20" />
+            </>
+          )}
+          
+          {/* 엔딩 대사 (영상 종료 후 검은 화면에 표시) */}
+          {endingVideoFaded && (
+            <div 
+              className="text-center relative z-10 mx-auto opacity-0 animate-fade-in"
               style={{
-                opacity: 1,
-                transition: 'opacity 2s ease-in-out',
+                paddingLeft: 'clamp(1rem, 4vw, 2rem)',
+                paddingRight: 'clamp(1rem, 4vw, 2rem)',
+                maxWidth: 'min(90vw, 80rem)',
+                animationDelay: '0.5s',
+                animationFillMode: 'forwards',
               }}
-            />
+            >
+              <div className="space-y-6">
+                {nationInfo[selectedNation].endingMessage.split('\n').map((line, index) => (
+                  <p
+                    key={index}
+                    className="text-white font-serif animate-text-glow"
+                    style={{
+                      textShadow: '0 0 20px rgba(255, 255, 255, 0.6), 0 0 40px rgba(255, 255, 255, 0.4), 0 0 60px rgba(255, 255, 255, 0.2)',
+                      letterSpacing: '0.08em',
+                      lineHeight: '1.6',
+                      fontWeight: '600',
+                      fontSize: 'clamp(1.125rem, 4vw, 1.875rem)',
+                      color: nationInfo[selectedNation].color,
+                    }}
+                  >
+                    {line}
+                  </p>
+                ))}
+              </div>
+            </div>
           )}
         </div>
       )}

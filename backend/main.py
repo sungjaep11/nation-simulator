@@ -454,7 +454,7 @@ def categorize_news(text: str) -> str:
     return "event"
 
 
-def check_and_handle_country_defeat(country: Country, session: Session, user_id: int) -> tuple[bool, str]:
+def check_and_handle_country_defeat(country: Country, session: Session, user_id: int, exempt_from_defeat: bool = False) -> tuple[bool, str]:
     """
     국가 멸망 조건 체크 및 처리
     
@@ -467,12 +467,17 @@ def check_and_handle_country_defeat(country: Country, session: Session, user_id:
         country: 체크할 국가 객체
         session: DB 세션
         user_id: 사용자 ID
+        exempt_from_defeat: 멸망 면제 여부 (전쟁 승리 등 특수 상황)
     
     Returns:
         (is_defeated, country_display_name): 멸망 여부와 국가 표시명
     """
     if not country.is_active:
         return False, ""  # 이미 멸망한 국가
+    
+    # 멸망 면제된 국가는 체크하지 않음
+    if exempt_from_defeat:
+        return False, ""
     
     country_provinces = country.get_provinces()
     country_original_id = country.id.rsplit("_", 1)[0] if "_" in country.id else country.id
@@ -638,8 +643,13 @@ async def verify_google_token(
         # 세션 토큰 생성
         session_token = create_session_token(user_id, user.email)
         
-        # 사용자명이 필요한지 확인 (새 사용자이거나 이름이 기본값인 경우)
+        # 사용자명이 필요한지 확인 (새 사용자는 항상 사용자명 입력 필요)
+        # 기존 사용자도 이름이 기본값이거나 너무 짧으면 사용자명 입력 필요
         needs_username = is_new_user or (user.name == "User" or not user.name or len(user.name.strip()) < 2)
+        
+        # 새 사용자인 경우 항상 사용자명 입력 페이지로 보냄 (Google name이 있어도)
+        if is_new_user:
+            needs_username = True
         
         # 게임 데이터 확인 및 초기화 (사용자명이 이미 설정된 경우에만)
         existing_countries = session.exec(
@@ -1443,6 +1453,15 @@ async def handle_game_turn(
             min_trade_gain = 50
             print(f"⚠️ [데이터 보정] 교역 명령인데 재정 변화가 {finance_change}입니다. 최소 {min_trade_gain}으로 보정")
             changes['finance'] = min_trade_gain
+    
+    # 3. changes 값이 과도하게 큰 음수일 경우 제한 (버그 방지)
+    for key in ['finance', 'population', 'military', 'happiness']:
+        if key in changes:
+            # 변화량이 현재 값의 절반 이상을 감소시키려 하면 제한
+            current_value = getattr(country, key, 0)
+            if changes[key] < -abs(current_value) * 0.5:
+                print(f"⚠️ [데이터 보정] {country.name}의 {key} 변화량이 과도합니다 ({changes[key]}). 제한 적용")
+                changes[key] = int(max(-abs(current_value) * 0.5, -1000))  # 최대 1000 감소 제한
 
     # DB에 변화값 저장
     country.last_finance_change = changes.get('finance', 0)
@@ -1460,9 +1479,11 @@ async def handle_game_turn(
     country.military += changes.get('military', 0)  # changes['military']는 항상 적용됨
     country.happiness += changes.get('happiness', 0)
     
-    # 행복도 100% 제한, 군사력 최소값 0 제한
+    # 행복도 100% 제한, 군사력/재정/인구 최소값 0 제한
     country.happiness = min(100, max(0, country.happiness))
     country.military = max(0, country.military)
+    country.finance = max(0, country.finance)  # 재정 최소값 0 제한
+    country.population = max(0, country.population)  # 인구 최소값 0 제한
     
     country.turn += 1
     
@@ -1509,6 +1530,9 @@ async def handle_game_turn(
         )
         session.add(news_item)
     
+    # 전쟁 승리 여부 추적 (공격자 멸망 방지용)
+    war_attacker_won = False
+    
     # AI가 반환한 액션 처리
     for action in ai_data.get('actions', []):
         action_type = action.get('type')
@@ -1527,6 +1551,18 @@ async def handle_game_turn(
             
             # 모병 비용 정산: 유닛 1명당 재정 50 소모
             recruitment_cost = unit_count * 50
+            # 재정이 부족하면 모집 수량 조정
+            if country.finance < recruitment_cost:
+                # 재정이 부족하면 가능한 만큼만 모집
+                max_affordable = country.finance // 50
+                if max_affordable > 0:
+                    unit_count = max_affordable
+                    recruitment_cost = unit_count * 50
+                    print(f"⚠️ [모병] {country.name} 재정 부족으로 모집 수량 조정: {unit_count}명")
+                else:
+                    # 재정이 전혀 없으면 모집 불가
+                    print(f"⚠️ [모병] {country.name} 재정 부족으로 모집 취소")
+                    continue  # 이 액션 건너뛰기
             country.finance -= recruitment_cost
             country.last_finance_change -= recruitment_cost  # 사용자에게 보여줄 변화량에 합산
             
@@ -1732,17 +1768,26 @@ async def handle_game_turn(
             # 전쟁으로 인한 공격자(유저 국가) 군사력 감소 (승리/패배 모두 피해 발생)
             # **중요: 승리하더라도 전투에서 피해는 반드시 발생합니다**
             if outcome == "승리":
+                war_attacker_won = True  # 전쟁 승리 여부 추적
                 # 승리 시에도 전투 피해는 발생 (casualties의 30~50% 정도)
                 attacker_military_loss = int(casualties * 0.4)  # 승리 시 피해율 증가 (기존 0.3 -> 0.4)
                 country.military -= attacker_military_loss
-                print(f"⚔️ [전투] {country.name} 승리했지만 {attacker_military_loss}명의 병력 손실 발생 (casualties: {casualties})")
+                # **중요: 전쟁 승리 시 공격자는 멸망하지 않도록 최소 생존 보장**
+                # 승리했다는 것은 국가가 여전히 살아있다는 의미이므로, 최소한의 군사력 보장
+                if country.military <= 0:
+                    country.military = max(1, country.military)  # 최소 1명 보장
+                    print(f"⚔️ [전투] {country.name} 승리했지만 {attacker_military_loss}명의 병력 손실 발생. 최소 생존 보장으로 군사력 1명 유지")
+                else:
+                    print(f"⚔️ [전투] {country.name} 승리했지만 {attacker_military_loss}명의 병력 손실 발생 (casualties: {casualties})")
+                war_attacker_won = True
             elif outcome == "패배":
                 # 패배 시 큰 피해
                 attacker_military_loss = int(casualties * 0.8)
                 country.military -= attacker_military_loss
                 print(f"⚔️ [전투] {country.name} 패배로 {attacker_military_loss}명의 병력 손실 발생 (casualties: {casualties})")
-            # 군사력 최소값 0 제한
-            country.military = max(0, country.military)
+            # 군사력 최소값 0 제한 (패배 시에만 적용, 승리 시는 위에서 처리)
+            if outcome != "승리":
+                country.military = max(0, country.military)
             
             # 전쟁으로 인한 방어자(타겟 국가) 수치 감소
             # **중요: 방어 국가도 전쟁 피해를 반드시 받아야 합니다**
@@ -1767,6 +1812,7 @@ async def handle_game_turn(
                 # 방어자 수치 제한
                 target_country_db.military = max(0, target_country_db.military)
                 target_country_db.population = max(0, target_country_db.population)
+                target_country_db.finance = max(0, target_country_db.finance)  # 재정 최소값 0 제한
                 target_country_db.happiness = min(100, max(0, target_country_db.happiness))
                 target_country_db.update_total_score()
                 session.add(target_country_db)
@@ -1953,6 +1999,15 @@ async def handle_game_turn(
             }
             ai_turn_data['changes'] = other_changes
         
+        # changes 값이 과도하게 큰 음수일 경우 제한 (버그 방지)
+        for key in ['finance', 'population', 'military', 'happiness']:
+            if key in other_changes:
+                # 변화량이 현재 값의 절반 이상을 감소시키려 하면 제한
+                current_value = getattr(other_country_db, key, 0)
+                if other_changes[key] < -abs(current_value) * 0.5:
+                    print(f"⚠️ [AI 데이터 보정] {other_country_db.name}의 {key} 변화량이 과도합니다 ({other_changes[key]}). 제한 적용")
+                    other_changes[key] = int(max(-abs(current_value) * 0.5, -1000))  # 최대 1000 감소 제한
+        
         # 데이터 무결성 보정 로직 (AI 국가)
         # 1. 전쟁 액션이 포함된 턴에는 population이 양수일 수 없음 (전쟁은 인구 감소)
         ai_has_war_action = any(action.get('type') == 'war' for action in other_actions)
@@ -1978,9 +2033,11 @@ async def handle_game_turn(
         other_country_db.military += other_changes.get('military', 0)  # changes['military']는 항상 적용됨
         other_country_db.happiness += other_changes.get('happiness', 0)
         
-        # 행복도 100% 제한, 군사력 최소값 0 제한
+        # 행복도 100% 제한, 군사력/재정/인구 최소값 0 제한
         other_country_db.happiness = min(100, max(0, other_country_db.happiness))
         other_country_db.military = max(0, other_country_db.military)
+        other_country_db.finance = max(0, other_country_db.finance)  # 재정 최소값 0 제한
+        other_country_db.population = max(0, other_country_db.population)  # 인구 최소값 0 제한
         
         other_country_db.turn += 1
         other_country_db.update_total_score()
@@ -2024,6 +2081,18 @@ async def handle_game_turn(
                 
                 # 모병 비용 정산: 유닛 1명당 재정 50 소모
                 recruitment_cost = unit_count * 50
+                # 재정이 부족하면 모집 수량 조정
+                if other_country_db.finance < recruitment_cost:
+                    # 재정이 부족하면 가능한 만큼만 모집
+                    max_affordable = other_country_db.finance // 50
+                    if max_affordable > 0:
+                        unit_count = max_affordable
+                        recruitment_cost = unit_count * 50
+                        print(f"⚠️ [AI 모병] {other_country_db.name} 재정 부족으로 모집 수량 조정: {unit_count}명")
+                    else:
+                        # 재정이 전혀 없으면 모집 불가
+                        print(f"⚠️ [AI 모병] {other_country_db.name} 재정 부족으로 모집 취소")
+                        continue  # 이 액션 건너뛰기
                 other_country_db.finance -= recruitment_cost
                 other_country_db.last_finance_change -= recruitment_cost  # 변화량에 합산
                 
@@ -2199,6 +2268,7 @@ async def handle_game_turn(
                     # 방어자 수치 제한
                     ai_target_country_db.military = max(0, ai_target_country_db.military)
                     ai_target_country_db.population = max(0, ai_target_country_db.population)
+                    ai_target_country_db.finance = max(0, ai_target_country_db.finance)  # 재정 최소값 0 제한
                     ai_target_country_db.happiness = min(100, max(0, ai_target_country_db.happiness))
                     ai_target_country_db.update_total_score()
                     session.add(ai_target_country_db)
@@ -2435,10 +2505,16 @@ async def handle_game_turn(
         }
     
     # 국가 멸망 체크 로직 (모든 국가에 대해 통합 체크)
+    # **중요: 전쟁 승리한 공격자는 멸망하지 않도록 보장**
     fallen_countries = []
     
     for check_country in all_countries_db:
-        is_defeated, defeated_name = check_and_handle_country_defeat(check_country, session, user_id)
+        # 전쟁 승리한 공격자는 멸망 체크에서 제외
+        is_exempt = war_attacker_won and check_country.id == user_specific_country_id
+        if is_exempt:
+            print(f"🛡️ [보호] {check_country.name}은(는) 전쟁 승리로 인해 멸망 체크에서 제외됩니다.")
+        
+        is_defeated, defeated_name = check_and_handle_country_defeat(check_country, session, user_id, exempt_from_defeat=is_exempt)
         if is_defeated:
             fallen_countries.append(defeated_name)
     

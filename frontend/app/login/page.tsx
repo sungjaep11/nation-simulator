@@ -47,7 +47,8 @@ export default function LoginPage() {
       const user = authData.user;
       const sessionToken = authData.session_token;
       const isNewUser = authData.is_new_user || false;
-      const needsUsername = authData.needs_username !== undefined ? authData.needs_username : isNewUser;
+      // 새 사용자는 항상 사용자명 입력 필요, 기존 사용자는 needs_username 값 확인
+      const needsUsername = isNewUser || (authData.needs_username !== undefined ? authData.needs_username : false);
 
       // 세션 토큰 및 사용자 정보를 localStorage에 저장
       localStorage.setItem("session_token", sessionToken);
