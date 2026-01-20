@@ -772,7 +772,7 @@ const handleSelectCountry = (countryId: string) => {
                       onMouseUp={(e) => e.stopPropagation()}
                     >
                       <Character3D
-                        key={`${country.id}-${isExpanded}`}
+                        key={country.id}
                         nation={country.id as "goguryeo" | "baekje" | "silla"}
                         animationType="appearance"
                         size="full"

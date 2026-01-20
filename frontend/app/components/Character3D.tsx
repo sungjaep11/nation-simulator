@@ -99,9 +99,16 @@ function Model({
   const { actions } = useAnimations(animations, scene);
 
   // 애니메이션 재생 - 반복 재생
+  const hasPlayedRef = useRef(false);
   useEffect(() => {
     if (!actions || Object.keys(actions).length === 0) return;
-    if (!shouldPlay) return;
+    if (!shouldPlay) {
+      hasPlayedRef.current = false;
+      return;
+    }
+    
+    // 이미 재생 중이면 다시 재생하지 않음
+    if (hasPlayedRef.current) return;
     
     const action = Object.values(actions)[0];
     if (!action) return;
@@ -109,9 +116,11 @@ function Model({
     action.reset();
     action.setLoop(THREE.LoopRepeat, Infinity); // 반복 재생
     action.play();
+    hasPlayedRef.current = true;
 
     return () => {
       action.stop();
+      hasPlayedRef.current = false;
     };
   }, [actions, shouldPlay, modelPath]);
 
