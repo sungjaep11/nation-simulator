@@ -4,9 +4,9 @@ from sqlmodel import Session, select
 from datetime import datetime, timedelta
 import random
 import asyncio
-from database import engine, create_db_and_tables, get_session
-from models import Country, CommandLog, NewsItem, MilitaryUnit, Diplomacy, SecretIntelligence, User
-from ai_service import get_gemini_game_data, get_ai_country_turn
+from backend.database import engine, create_db_and_tables, get_session
+from backend.models import Country, CommandLog, NewsItem, MilitaryUnit, Diplomacy, SecretIntelligence, User
+from backend.ai_service import get_gemini_game_data, get_ai_country_turn
 import httpx
 import os
 import jwt

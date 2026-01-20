@@ -21,7 +21,7 @@ except Exception:
 load_dotenv()
 
 # AI 모델 설정
-AI_MODEL = "gemma-3-12b-it"
+AI_MODEL = "gemma-3-4b-it"
 
 _api_key = None
 _client = None
@@ -130,7 +130,7 @@ async def get_gemini_game_data(user_input: str, current_stats: dict, all_countri
 [유저 명령] "{user_input}"
 
 ### 필수 규칙 ###
-1. changes 필드는 유저의 명령과 현재 상황에 맞게 설정하세요:
+1. changes 필드는 유저의 명령과 생성할 시나리오와 뉴스에 맞게 설정하세요:
    - 적극적인 명령(전쟁, 개혁, 건설): 큰 변화 (finance/population: -100~100, happiness, military: -10~10)
    - 소극적인 명령(내정, 평화): 작은 변화 (finance/population: -20~20, happiness, military: -5~5)
    - 군사 증강: military 1~5 증가, finance 감소
@@ -274,15 +274,16 @@ async def get_ai_country_turn(country_stats: dict, all_countries: dict) -> dict:
 1. 자율적 의사결정:
    - **매 턴마다 적극적으로 행동하세요 (전쟁, 외교, 군사 증강 중 최소 1개 필수)**
    - 약한 국가가 있으면 도발하거나 침략 고려 (50% 이상 확률로 전쟁 시작)
-   - 외교 관계에 따라 동맹 또는 배신 결정
+   - 외교 관계에 따라 동맹 또는 배신 결정 (배신은 10%의 확률)
    - 군사력이 우위면 즉시 전쟁 시작
    - **전쟁 시작 시 반드시 전면전으로 처리 (소규모 충돌 금지)**
 
 2. 수치 설정:
-   - finance: -500 ~ 1000 (군사비, 경제활동)
-   - population: -200 ~ 500 (이민, 전쟁 피해)
-   - military: -5 ~ 5 (전쟁, 모집)
-   - happiness: -30 ~ 20 (전쟁, 세금, 외교)
+   - 적극적인 명령(전쟁, 개혁, 건설): 큰 변화 (finance/population: -100~100, happiness, military: -10~10)
+   - 소극적인 명령(내정, 평화): 작은 변화 (finance/population: -20~20, happiness, military: -5~5)
+   - 군사 증강: military 1~5 증가, finance 감소
+   - 외교: happiness, favorability 변화
+   - 실패/저항: 음수 변화
 
 3. 다양한 Mood 생성 (균형있게):
    - happy (30%): 전쟁 승리, 영토 확장, 외교 성공, 경제 호황
