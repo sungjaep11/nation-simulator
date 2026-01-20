@@ -152,15 +152,15 @@ async def get_gemini_game_data(user_input: str, current_stats: dict, all_countri
     
     Args:
         user_input: 사용자 입력 명령
-        current_stats: 현재 국가의 스탯
-        all_countries: 모든 국가의 현재 상태 (dict)
+        current_stats: 현재 국가의 스탯 (provinces 포함)
+        all_countries: 모든 국가의 현재 상태 (dict, provinces 포함)
     """
     try:
         _get_client()  # Ensure client is configured
         
         other_countries_info = ""
         if all_countries:
-            # 다른 국가들의 외교 및 군사 정보도 포함
+            # 다른 국가들의 외교, 군사, 영토 정보도 포함
             other_countries_with_info = {}
             for country_id, country_data in all_countries.items():
                 other_countries_with_info[country_id] = {
@@ -171,15 +171,21 @@ async def get_gemini_game_data(user_input: str, current_stats: dict, all_countri
                     other_countries_with_info[country_id]["diplomacy"] = country_data["diplomacy"]
                 if "military_units" in country_data:
                     other_countries_with_info[country_id]["military_units"] = country_data["military_units"]
+                # 영토 정보 추가
+                if "provinces" in country_data:
+                    other_countries_with_info[country_id]["provinces"] = country_data["provinces"]
             other_countries_info = f"\n[다른 국가들 현황] {json.dumps(other_countries_with_info, ensure_ascii=False)}"
         
-        # 외교 및 군사 정보 추출
+        # 외교, 군사, 영토 정보 추출
         diplomacy_info = ""
         military_info = ""
+        provinces_info = ""
         if "diplomacy" in current_stats and current_stats["diplomacy"]:
             diplomacy_info = f"\n[현재 외교 관계] {json.dumps(current_stats['diplomacy'], ensure_ascii=False)}"
         if "military_units" in current_stats and current_stats["military_units"]:
             military_info = f"\n[현재 군사 유닛] {json.dumps(current_stats['military_units'], ensure_ascii=False)}"
+        if "provinces" in current_stats and current_stats["provinces"]:
+            provinces_info = f"\n[내 보유 영토] {json.dumps(current_stats['provinces'], ensure_ascii=False)}"
         
         prompt = f"""
 당신은 삼국시대 게임의 시스템 AI입니다. 
@@ -187,7 +193,7 @@ async def get_gemini_game_data(user_input: str, current_stats: dict, all_countri
 **유저의 명령을 최우선으로 존중하고 적극적으로 반응하세요.** 유저가 원하는 대로 게임이 진행되도록 도와주세요.
 
 [유저 국가: {current_stats.get('name', '')}]
-[현재 스탯] {json.dumps({k: v for k, v in current_stats.items() if k not in ['diplomacy', 'military_units']}, ensure_ascii=False)}{diplomacy_info}{military_info}{other_countries_info}
+[현재 스탯] {json.dumps({k: v for k, v in current_stats.items() if k not in ['diplomacy', 'military_units', 'provinces']}, ensure_ascii=False)}{provinces_info}{diplomacy_info}{military_info}{other_countries_info}
 [유저 명령] "{user_input}"
 
 ### 핵심 원칙: 유저 명령 최우선 ###
@@ -197,16 +203,21 @@ async def get_gemini_game_data(user_input: str, current_stats: dict, all_countri
    - 적극적인 명령(전쟁, 개혁, 건설): 큰 변화 (finance/population: -150~150, happiness, military: -15~15)
    - 소극적인 명령(내정, 평화): 중간 변화 (finance/population: -50~50, happiness, military: -5~5)
    - 군사 증강: military 2~8 증가, finance 적절히 감소
+   - **교역/무역 활동: finance는 반드시 양수(+)가 되어야 함 (예: +50~+200). 교역으로 재정이 감소하는 것은 논리적으로 불가능합니다.**
+   - **전쟁 중: 승리하더라도 happiness와 population은 감소할 수 있습니다. 전쟁은 백성에게 고통을 주기 때문입니다.**
    - 유저가 원하는 만큼 충분히 변화를 주세요
    - **중요: 명령에 따라 적절한 변화값을 반드시 설정하세요. 모든 값을 0으로 설정하면 안 됩니다.**
 
 2. 명령 해석 및 실행 (유저 의도 적극 반영):
    - "전쟁", "침략", "공격", "정복" → war 액션 생성 필수. **전면전으로 처리. outcome은 유저가 승리하기 쉽도록 70% 확률로 "승리", 30% 확률로 "패배". land_gained/land_lost는 5~15 영토 변화**
+   - **전쟁 시 changes: 승리하더라도 happiness는 -5~-15 감소 가능, population은 -100~-300 감소 가능 (전쟁의 현실적 피해)**
    - "외교", "동맹", "강화", "우호" → diplomacy 액션 생성. **유저가 원하는 대로 70% 확률로 성공(favorability +40~60) 또는 30% 확률로 실패(favorability -5~15)**
-   - "군사 증강", "모집", "병사", "군대", "무기", "첩자", "생화학무기", "암살자" → add_military 액션 생성. finance 감소. **유닛명은 반드시 구체적으로 (예: "철기병", "첩자", "생화학무기")**
+   - "군사 증강", "모집", "병사", "군대", "무기", "첩자", "생화학무기", "암살자", "해군", "수군", "함대" → add_military 액션 생성. finance 감소. **유닛명은 반드시 구체적으로 (예: "철기병", "궁병", "해군", "첩자", "생화학무기")**
+   - "교역", "무역", "상업" → finance는 반드시 양수 증가 (+50~+200), population/happiness도 소폭 증가 가능
    - "내정", "개혁", "정치" → finance/population/happiness 증가, military 변화 없음
    - "스파이", "암살", "정보" → secret_operation 액션 생성
    - **유저의 명령이 명확하면 그대로 실행하고, 모호하면 유저에게 유리한 방향으로 해석하세요**
+   - **[절대 금지] 유저가 명시적으로 "군사 증강", "첩자", "철기병" 등을 요청하지 않은 경우, add_military 액션을 생성하지 마세요. 유저의 명령 없이 자동으로 유닛을 생성하는 것은 금지됩니다.**
 
 3. 다양한 Mood 생성 (유저 성공 시 happy 우선):
    - happy: 전쟁 승리, 외교 성공, 경제 성장, 영토 확장 (유저가 성공하면 happy로 설정)
@@ -228,15 +239,19 @@ async def get_gemini_game_data(user_input: str, current_stats: dict, all_countri
    - **유저가 원하는 대로 게임이 진행되도록 적극적으로 도와주세요**
 
 액션 형식:
-- war: {{"type": "war", "target": "적국명", "outcome": "승리/패배", "land_gained": 3~10, "land_lost": 3~10, "casualties": 100~500, "target_provinces": ["지역명1", "지역명2"]}}
+- war: {{"type": "war", "target": "적국명", "outcome": "승리/패배", "land_gained": 3~10, "land_lost": 3~10, "casualties": 100~500, "captured_provinces": ["지역명1", "지역명2"]}}
   * outcome에 따라 수치 자동 반영. 승리 시 land_gained, 패배 시 land_lost
   * 전면전이므로 반드시 큰 규모로 처리
-  * **중요: target_provinces에는 점령하려는 적국의 실제 지역명을 반드시 포함해야 함!**
-  * 유효한 지역명: 자강도, 함경북도, 함경남도, 황해북도, 황해남도, 개성특별시, 강원특별자치도, 평안북도, 평안남도, 평양직할시, 량강도, 신의주시, 남포특별시, 라선특별시, 서울특별시, 인천광역시, 경기도, 충청북도, 충청남도, 세종특별자치시, 대전광역시, 전라북도, 전북특별자치도, 전라남도, 광주광역시, 제주특별자치도, 경상북도, 경상남도, 대구광역시, 울산광역시, 부산광역시
-  * 시나리오에서 언급한 지역과 target_provinces가 일치해야 지도에 반영됨
-- add_military: {{"type": "add_military", "name": "군대명", "count": 수량, "icon": "아이콘", "unit_type": "regular/spy"}}
+  * **[매우 중요] captured_provinces에는 실제로 점령한 적국의 영토명을 반드시 포함해야 함!**
+  * **적국의 provinces 목록에서만 선택할 수 있음 (다른 국가들 현황의 provinces 필드 참조)**
+  * **captured_provinces 개수 = land_gained 값과 일치해야 함**
+  * 시나리오에서 언급한 지역과 captured_provinces가 일치해야 지도에 정확히 반영됨
+  * 예시: 적국이 ["서울특별시", "경기도", "인천광역시"]를 보유 중이라면, captured_provinces는 이 중에서만 선택
+- add_military: {{"type": "add_military", "name": "군대명", "count": 수량, "icon": "아이콘", "unit_type": "regular/spy/navy"}}
   * 반드시 생성하면 finance에서 비용 공제 필수
-  * name은 구체적으로: "철기병", "궁병", "첩자", "생화학무기", "암살단" 등
+  * name은 구체적으로: "철기병", "궁병", "해군", "수군", "함대", "첩자", "생화학무기", "암살단" 등
+  * unit_type은 "regular" (일반 병력), "spy" (첩자/스파이), "navy" (해군/수군) 중 하나
+  * **"해군", "수군", "함대" 요청 시 unit_type을 "navy"로 설정하고 name도 "해군" 또는 "수군"으로 설정**
 - diplomacy: {{"type": "diplomacy", "target": "국가명", "status": "동맹/중립/적대", "favorability": -20~50}}
   * status는 반드시 한글로: "동맹", "중립", "적대" (영문 "neutral" 사용 금지)
   * 70% 확률로 성공, 30% 확률로 실패 (유저에게 유리)
@@ -255,7 +270,8 @@ async def get_gemini_game_data(user_input: str, current_stats: dict, all_countri
     "changes": {{"finance": -50, "population": 100, "military": 3, "happiness": 5}},
     "actions": [
         {{"type": "add_military", "name": "철기병", "count": 50, "icon": "🐎", "unit_type": "regular"}},
-        {{"type": "war", "target": "고구려", "outcome": "승리", "land_gained": 5, "land_lost": 0, "casualties": 200, "target_provinces": ["황해북도", "개성특별시"]}}
+        {{"type": "add_military", "name": "해군", "count": 30, "icon": "⛵", "unit_type": "navy"}},
+        {{"type": "war", "target": "고구려", "outcome": "승리", "land_gained": 2, "land_lost": 0, "casualties": 200, "captured_provinces": ["황해북도", "개성특별시"]}}
     ]
 }}
 
@@ -266,6 +282,9 @@ async def get_gemini_game_data(user_input: str, current_stats: dict, all_countri
 - 전쟁 시뮬레이션: 유저가 승리하기 쉽도록 설정 (70% 승리 확률)
 - **전쟁은 전면전으로, 외교는 70% 성공률로 유저에게 유리하게**
 - 유저의 명령이 명확하면 반드시 해당 액션을 생성하세요
+- **[절대 금지] 유저가 명시적으로 요청하지 않은 add_military 액션을 생성하지 마세요. "첩자", "철기병" 등을 유저 명령 없이 자동 생성하는 것은 금지됩니다.**
+- **교역/무역 명령 시 finance는 반드시 양수(+)가 되어야 합니다.**
+- **전쟁 시 승리하더라도 happiness와 population 감소는 현실적인 현상입니다.**
 
 **[절대 규칙] 반드시 위의 JSON 형식으로만 응답하세요. 설명, 마크다운, 추가 텍스트 없이 오직 JSON 객체 하나만 출력하세요.**
 
@@ -332,8 +351,8 @@ async def get_ai_country_turn(country_stats: dict, all_countries: dict) -> dict:
     AI가 운영하는 국가의 자동 턴 진행
     
     Args:
-        country_stats: AI 국가의 현재 스탯
-        all_countries: 모든 국가의 현재 상태
+        country_stats: AI 국가의 현재 스탯 (provinces 포함)
+        all_countries: 모든 국가의 현재 상태 (provinces 포함)
     
     Returns:
         턴 결과 (scenario, public_news, secret_news, changes, actions)
@@ -341,15 +360,18 @@ async def get_ai_country_turn(country_stats: dict, all_countries: dict) -> dict:
     try:
         _get_client()  # Ensure client is configured
         
-        # 외교 및 군사 정보 추출
+        # 외교, 군사, 영토 정보 추출
         diplomacy_info = ""
         military_info = ""
+        provinces_info = ""
         if "diplomacy" in country_stats and country_stats["diplomacy"]:
             diplomacy_info = f"\n[내 외교 관계] {json.dumps(country_stats['diplomacy'], ensure_ascii=False)}"
         if "military_units" in country_stats and country_stats["military_units"]:
             military_info = f"\n[내 군사 유닛] {json.dumps(country_stats['military_units'], ensure_ascii=False)}"
+        if "provinces" in country_stats and country_stats["provinces"]:
+            provinces_info = f"\n[내 보유 영토] {json.dumps(country_stats['provinces'], ensure_ascii=False)}"
         
-        # 다른 국가들의 외교 및 군사 정보도 포함
+        # 다른 국가들의 외교, 군사, 영토 정보도 포함
         other_countries_with_info = {}
         for country_id, country_data in all_countries.items():
             other_countries_with_info[country_id] = {
@@ -360,13 +382,16 @@ async def get_ai_country_turn(country_stats: dict, all_countries: dict) -> dict:
                 other_countries_with_info[country_id]["diplomacy"] = country_data["diplomacy"]
             if "military_units" in country_data:
                 other_countries_with_info[country_id]["military_units"] = country_data["military_units"]
+            # 영토 정보 추가
+            if "provinces" in country_data:
+                other_countries_with_info[country_id]["provinces"] = country_data["provinces"]
         
         prompt = f"""
 당신은 삼국시대 게임에서 "{country_stats['name']}" 국가를 운영하는 AI입니다.
 현재 상황을 전략적으로 분석하고, 이번 턴의 행동과 결과를 결정하세요.
 
 [내 국가: {country_stats['name']}]
-[내 스탯] {json.dumps({k: v for k, v in country_stats.items() if k not in ['diplomacy', 'military_units']}, ensure_ascii=False)}{diplomacy_info}{military_info}
+[내 스탯] {json.dumps({k: v for k, v in country_stats.items() if k not in ['diplomacy', 'military_units', 'provinces']}, ensure_ascii=False)}{provinces_info}{diplomacy_info}{military_info}
 [다른 국가들] {json.dumps(other_countries_with_info, ensure_ascii=False)}
 
 ### AI 전략 지침 ###
@@ -378,13 +403,15 @@ async def get_ai_country_turn(country_stats: dict, all_countries: dict) -> dict:
    - 군사력이 크게 우위일 때만 전쟁 고려
    - **전쟁은 소규모 충돌부터 시작 가능 (전면전만 강제하지 않음)**
 
-2. 수치 설정 (플레이어 국가와 유사한 규모 유지):
-   - 적극적인 행동(전쟁, 개혁, 건설): 중간 변화 (finance/population: -50~50, happiness, military: -2~3)
-   - 소극적인 행동(내정, 평화): 작은 변화 (finance/population: -20~20, happiness, military: -1~1)
-   - 군사 증강: military 0~2 증가 (매우 제한적), finance 적절히 감소
+2. 수치 설정 (플레이어 국가보다 낮은 성장 속도 유지):
+   - 적극적인 행동(전쟁, 개혁, 건설): 작은 변화 (finance/population: -30~30, happiness: -2~2, military: -1~1)
+   - 소극적인 행동(내정, 평화): 매우 작은 변화 (finance/population: -10~15, happiness: -1~1, military: 0)
+   - 군사 증강: military 0~1 증가 (극도로 제한적), finance 적절히 감소
    - 외교: happiness, favorability 변화
    - 실패/저항: 음수 변화
-   - **중요: 플레이어 국가의 진행 속도와 유사한 수준의 변화를 유지하세요. 특히 군사력 증가는 매우 제한적으로 유지하세요.**
+   - **중요: 플레이어 국가보다 낮은 성장 속도를 유지하세요. AI 국가는 플레이어를 따라잡거나 초과하지 않아야 합니다.**
+   - **교역/무역 활동: finance는 반드시 양수(+) (예: +10~+30). AI 국가도 교역으로 재정이 감소하는 것은 불가능합니다.**
+   - **전쟁 시: 승리하더라도 happiness는 -3~-8 감소 가능, population은 -50~-150 감소 가능 (전쟁의 현실적 피해)**
 
 3. 다양한 Mood 생성 (균형있게):
    - happy (25%): 전쟁 승리, 영토 확장, 외교 성공, 경제 호황
@@ -393,23 +420,27 @@ async def get_ai_country_turn(country_stats: dict, all_countries: dict) -> dict:
    - depressed (10%): 큰 손실, 영토 상실, 멸망 위기
 
 4. 액션 선택 (균형있게):
-   - add_military: **매우 드물게만 생성 (10~15% 확률, 3~4턴에 한 번 정도)**, **유닛명을 구체적으로 (철기병, 궁병, 첩자 등), 수량은 10~25명 정도로 매우 제한적**
-   - war: **정당한 이유가 있을 때만 전쟁 시작. outcome은 50% 확률로 승리/패배. land_gained/land_lost는 1~5 영토 (플레이어와 유사한 규모). target_provinces에 점령 대상 지역명 명시 필수!**
-   - diplomacy: **50% 확률로 성공(favorability +20~30) 또는 실패(favorability -10~15), status는 반드시 한글 "동맹", "중립", "적대" 사용**
-   - secret_operation: 가끔 사용 (10% 확률)
-   - **액션은 선택적입니다. 매 턴마다 액션이 필요하지 않습니다. 내정에 집중하는 턴도 정상적입니다.**
-   - **군사 증강은 매우 드물게만 하세요. 대부분의 턴은 내정이나 외교에 집중하세요.**
-   - **war 액션 시 target_provinces 필수!** 유효한 지역명: 자강도, 함경북도, 함경남도, 황해북도, 황해남도, 개성특별시, 강원특별자치도, 평안북도, 평안남도, 평양직할시, 량강도, 신의주시, 남포특별시, 라선특별시, 서울특별시, 인천광역시, 경기도, 충청북도, 충청남도, 세종특별자치시, 대전광역시, 전라북도, 전북특별자치도, 전라남도, 광주광역시, 제주특별자치도, 경상북도, 경상남도, 대구광역시, 울산광역시, 부산광역시
+   - add_military: **극도로 드물게만 생성 (5% 확률, 5~6턴에 한 번 정도)**, **유닛명을 구체적으로 (철기병, 궁병, 해군 등), 수량은 5~15명 정도로 극도로 제한적. unit_type은 "regular", "spy", "navy" 중 하나**
+   - **[절대 금지] "첩자"나 "철기병"을 매 턴 자동으로 생성하지 마세요. 정당한 전략적 이유가 있을 때만 매우 드물게 생성하세요.**
+   - war: **정당한 이유가 있을 때만 전쟁 시작. outcome은 50% 확률로 승리/패배. land_gained/land_lost는 1~3 영토 (플레이어보다 작은 규모). captured_provinces에 실제 점령한 적국 영토명 명시 필수!**
+   - diplomacy: **50% 확률로 성공(favorability +15~25) 또는 실패(favorability -10~15), status는 반드시 한글 "동맹", "중립", "적대" 사용**
+   - secret_operation: 가끔 사용 (5% 확률)
+   - **액션은 선택적입니다. 매 턴마다 액션이 필요하지 않습니다. 대부분의 턴(70% 이상)은 액션 없이 내정에 집중하세요.**
+   - **군사 증강은 극도로 드물게만 하세요 (5% 확률). 대부분의 턴은 내정이나 외교에 집중하세요.**
+   - **war 액션 시 captured_provinces 필수!** 적국의 provinces 목록에서만 선택 가능. captured_provinces 개수 = land_gained 값과 일치해야 함
 
 5. **균형잡힌 게임 진행 (중요!)**:
-   - 플레이어 국가의 진행 속도와 유사한 수준을 유지하세요
+   - 플레이어 국가보다 낮은 성장 속도를 유지하세요. AI는 플레이어를 따라잡거나 초과하지 않아야 합니다.
    - 인과관계의 명확성: 모든 수치 변화(changes)와 액션(actions)은 앞서 작성한 scenario와 논리적으로 일치해야 합니다.
    - 선택적 액션: actions 배열은 비어있을 수 있습니다. 억지로 전쟁이나 대규모 액션을 끼워 넣지 마세요.
    - 외교는 정확히 50% 확률로 성공/실패
-   - **군사 증강은 매우 드물게만 하세요 (10~15% 확률, 3~4턴에 한 번). 수량은 10~25명으로 매우 제한적. 과도한 군사 증강은 절대 금지**
-   - 전쟁 casualties는 50~200명 정도로 제한 (플레이어와 유사한 규모)
+   - **군사 증강은 극도로 드물게만 하세요 (5% 확률, 5~6턴에 한 번). 수량은 5~15명으로 극도로 제한적. 과도한 군사 증강은 절대 금지**
+   - **[절대 금지] "첩자"나 "철기병"을 매 턴 자동으로 생성하지 마세요. 정당한 전략적 이유가 있을 때만 매우 드물게 생성하세요.**
+   - 전쟁 casualties는 30~100명 정도로 제한 (플레이어보다 작은 규모)
    - **중요: 이 함수는 AI가 자율적으로 운영하는 국가의 턴을 처리합니다. 유저 명령과는 무관합니다.**
-   - **군사력 증가를 최소화하고, 대부분의 턴은 내정(재정, 인구, 행복도)에 집중하세요.**
+   - **군사력 증가를 최소화하고, 대부분의 턴(70% 이상)은 액션 없이 내정(재정, 인구, 행복도)에 집중하세요.**
+   - **교역/무역 활동 시 finance는 반드시 양수(+)가 되어야 합니다.**
+   - **전쟁 시 승리하더라도 happiness와 population 감소는 현실적인 현상입니다.**
 
 응답 JSON 형식:
 {{
@@ -421,14 +452,15 @@ async def get_ai_country_turn(country_stats: dict, all_countries: dict) -> dict:
         "경제 정책 발표"
     ],
     "secret_news": ["비밀 작전, 전쟁 계획 등"],
-    "changes": {{"finance": 30, "population": 25, "military": 0, "happiness": 2}},
+    "changes": {{"finance": 15, "population": 10, "military": 0, "happiness": 1}},
     "actions": [
         {{"type": "add_military", "name": "철기병", "count": 15, "icon": "🐎", "unit_type": "regular"}},
-        {{"type": "war", "target": "약한_국가명", "outcome": "승리", "land_gained": 3, "land_lost": 0, "casualties": 100, "target_provinces": ["경기도", "인천광역시"]}},
+        {{"type": "add_military", "name": "해군", "count": 10, "icon": "⛵", "unit_type": "navy"}},
+        {{"type": "war", "target": "약한_국가명", "outcome": "승리", "land_gained": 2, "land_lost": 0, "casualties": 100, "captured_provinces": ["경기도", "인천광역시"]}},
         {{"type": "diplomacy", "target": "국가명", "status": "동맹", "favorability": 25}}
      * status는 반드시 한글 "동맹", "중립", "적대" 중 하나 사용
      * add_military는 매우 드물게만 포함 (대부분의 턴에는 actions가 비어있거나 다른 액션만 포함)
-     * war 액션의 target_provinces는 점령할 실제 지역명 리스트 (시나리오와 일치해야 함)
+     * war 액션의 captured_provinces는 실제로 점령한 적국 영토명 리스트 (적국의 provinces에서 선택, 시나리오와 일치해야 함)
     ]
 }}
 

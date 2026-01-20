@@ -16,12 +16,37 @@ class Country(SQLModel, table=True):
     title: str = ""
     color: str = ""
     is_active: bool = True  # 국가 활성 상태 (False면 멸망)
+    provinces: str = "[]"  # 보유 영토 목록 (JSON 문자열: ["서울특별시", "경기도", ...])
     
     # 지난 턴의 상태 변화값 저장 (AI 턴 처리 후 반영)
     last_finance_change: int = 0
     last_population_change: int = 0
     last_military_change: int = 0
     last_happiness_change: int = 0
+    
+    def get_provinces(self) -> List[str]:
+        """보유 영토 목록 반환"""
+        if not self.provinces:
+            return []
+        return json.loads(self.provinces)
+    
+    def set_provinces(self, provinces: List[str]):
+        """보유 영토 목록 설정"""
+        self.provinces = json.dumps(provinces, ensure_ascii=False)
+    
+    def add_province(self, province: str):
+        """영토 추가"""
+        provinces = self.get_provinces()
+        if province not in provinces:
+            provinces.append(province)
+            self.set_provinces(provinces)
+    
+    def remove_province(self, province: str):
+        """영토 제거"""
+        provinces = self.get_provinces()
+        if province in provinces:
+            provinces.remove(province)
+            self.set_provinces(provinces)
     
     def calculate_total_score(self) -> int:
         """국가의 종합 점수 계산
