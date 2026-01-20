@@ -662,28 +662,45 @@ async def get_country(
     }
 
 @app.get("/api/countries")
-async def get_all_countries(session: Session = Depends(get_session)):
-    """모든 국가 조회"""
-    countries = session.exec(select(Country)).all()
-    return [
-        {
-            "id": c.id,
-            "name": c.name,
-            "finance": c.finance,
-            "population": c.population,
-            "happiness": c.happiness,
-            "military": c.military,
-            "totalScore": c.totalScore,
-            "turn": c.turn,
-            "title": c.title,
-            "color": c.color,
-            "lastFinanceChange": c.last_finance_change,
-            "lastPopulationChange": c.last_population_change,
-            "lastMilitaryChange": c.last_military_change,
-            "lastHappinessChange": c.last_happiness_change
-        }
-        for c in countries
-    ]
+async def get_all_countries(
+    session_token: str = Query(..., description="Session token"),
+    session: Session = Depends(get_session)
+):
+    """사용자별 모든 국가 조회"""
+    try:
+        # 세션 토큰에서 사용자 ID 추출
+        token_payload = verify_session_token(session_token)
+        user_id = token_payload.get("user_id")
+        
+        if not user_id:
+            raise HTTPException(status_code=401, detail="유효하지 않은 세션 토큰입니다.")
+        
+        # 해당 사용자의 국가만 조회
+        countries = session.exec(select(Country).where(Country.user_id == user_id)).all()
+        
+        return [
+            {
+                "id": c.id.rsplit("_", 1)[0] if "_" in c.id else c.id,  # user_id 제거하여 원래 형식으로 반환
+                "name": c.name,
+                "finance": c.finance,
+                "population": c.population,
+                "happiness": c.happiness,
+                "military": c.military,
+                "totalScore": c.totalScore,
+                "turn": c.turn,
+                "title": c.title,
+                "color": c.color,
+                "lastFinanceChange": c.last_finance_change,
+                "lastPopulationChange": c.last_population_change,
+                "lastMilitaryChange": c.last_military_change,
+                "lastHappinessChange": c.last_happiness_change
+            }
+            for c in countries
+        ]
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"국가 조회 중 오류가 발생했습니다: {str(e)}")
 
 @app.get("/api/country/{country_id}/news")
 async def get_country_news(
@@ -949,7 +966,9 @@ def initialize_game_data(session: Session, user_id: int):
 
 @app.on_event("startup")
 def on_startup():
+    from database import ensure_db_permissions
     create_db_and_tables()
+    ensure_db_permissions()  # Ensure permissions after creation
     # 게임 데이터는 사용자별로 초기화되므로 여기서는 초기화하지 않음
 
 @app.post("/api/action")
@@ -1087,8 +1106,9 @@ async def handle_game_turn(
     country.military += changes.get('military', 0)
     country.happiness += changes.get('happiness', 0)
     
-    # 행복도 100% 제한
+    # 행복도 100% 제한, 군사력 최소값 0 제한
     country.happiness = min(100, max(0, country.happiness))
+    country.military = max(0, country.military)
     
     country.turn += 1
     
@@ -1237,6 +1257,8 @@ async def handle_game_turn(
                 country.military -= int(casualties * 0.3)  # 피해
             elif outcome == "패배":
                 country.military -= int(casualties * 0.8)  # 큰 피해
+            # 군사력 최소값 0 제한
+            country.military = max(0, country.military)
     
     session.add(country)
     session.commit()
@@ -1283,8 +1305,9 @@ async def handle_game_turn(
         other_country_db.military += other_changes.get('military', 0)
         other_country_db.happiness += other_changes.get('happiness', 0)
         
-        # 행복도 100% 제한
+        # 행복도 100% 제한, 군사력 최소값 0 제한
         other_country_db.happiness = min(100, max(0, other_country_db.happiness))
+        other_country_db.military = max(0, other_country_db.military)
         
         other_country_db.turn += 1
         other_country_db.update_total_score()

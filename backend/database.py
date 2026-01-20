@@ -6,12 +6,16 @@ import stat
 # SQLite 데이터베이스 설정
 # backend 디렉토리에 DB 파일을 고정 위치로 생성
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.path.join(BASE_DIR, "game.db")
+DB_PATH = os.path.abspath(os.path.join(BASE_DIR, "game.db"))  # Ensure absolute path
 # macOS에서 안정적으로 작동하도록 절대 경로 사용
-sqlite_url = f"sqlite:///{DB_PATH}"
+# Normalize path separators for SQLite URL
+sqlite_url = f"sqlite:///{DB_PATH.replace(os.sep, '/')}"
 
 # Ensure the database directory exists and has write permissions
 os.makedirs(BASE_DIR, exist_ok=True)
+# Ensure directory is writable
+if not os.access(BASE_DIR, os.W_OK):
+    raise PermissionError(f"Database directory is not writable: {BASE_DIR}")
 
 engine = create_engine(
     sqlite_url,
@@ -58,27 +62,80 @@ def create_db_and_tables():
     if not os.access(BASE_DIR, os.W_OK):
         raise PermissionError(f"Database directory is not writable: {BASE_DIR}")
     
-    # Ensure database file exists and has write permissions
+    # Create database file explicitly with proper permissions BEFORE SQLAlchemy uses it
     if not os.path.exists(DB_PATH):
-        # Create an empty database file with write permissions
+        # Create an empty database file
         conn = sqlite3.connect(DB_PATH)
+        # Test write access immediately
+        cursor = conn.cursor()
+        cursor.execute("PRAGMA journal_mode=WAL")  # Enable WAL mode for better concurrency
+        conn.commit()
         conn.close()
+        # Set file permissions to be writable (rw-rw-rw-)
+        try:
+            os.chmod(DB_PATH, 0o666)  # rw-rw-rw-
+        except OSError as e:
+            print(f"Warning: Could not set database file permissions: {e}")
+    else:
+        # File exists - ensure it's writable
+        try:
+            # Test if file is writable
+            if not os.access(DB_PATH, os.W_OK):
+                print(f"Database file exists but is not writable. Attempting to fix permissions...")
+            # Set file permissions to be writable
+            os.chmod(DB_PATH, 0o666)  # rw-rw-rw-
+        except OSError as e:
+            print(f"Warning: Could not set database file permissions: {e}")
+            # Try to remove and recreate if permissions can't be fixed
+            try:
+                os.remove(DB_PATH)
+                conn = sqlite3.connect(DB_PATH)
+                cursor = conn.cursor()
+                cursor.execute("PRAGMA journal_mode=WAL")
+                conn.commit()
+                conn.close()
+                os.chmod(DB_PATH, 0o666)
+                print("Recreated database file with proper permissions")
+            except Exception as recreate_error:
+                raise PermissionError(f"Could not fix database permissions: {recreate_error}")
     
-    # Always ensure database file has write permissions (fixes existing files with wrong permissions)
-    try:
-        os.chmod(DB_PATH, stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP | stat.S_IWGRP | stat.S_IROTH | stat.S_IWOTH)
-    except OSError as e:
-        print(f"Warning: Could not set database file permissions: {e}")
-    
+    # Now create tables using SQLAlchemy
     SQLModel.metadata.create_all(engine)
+    
     # 마이그레이션 실행
     migrate_add_last_change_columns()
     
-    # Ensure database file still has write permissions after operations
-    try:
-        os.chmod(DB_PATH, stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP | stat.S_IWGRP | stat.S_IROTH | stat.S_IWOTH)
-    except OSError as e:
-        print(f"Warning: Could not set database file permissions after creation: {e}")
+    # Final check: ensure database file still has write permissions after operations
+    if os.path.exists(DB_PATH):
+        try:
+            os.chmod(DB_PATH, 0o666)  # rw-rw-rw-
+            # Verify write access
+            if not os.access(DB_PATH, os.W_OK):
+                raise PermissionError(f"Database file is not writable after creation: {DB_PATH}")
+        except OSError as e:
+            print(f"Warning: Could not verify database file permissions: {e}")
+
+def ensure_db_permissions():
+    """데이터베이스 파일의 쓰기 권한을 확인하고 수정"""
+    if os.path.exists(DB_PATH):
+        try:
+            # Check if file is writable
+            if not os.access(DB_PATH, os.W_OK):
+                print(f"Database file is not writable. Fixing permissions...")
+                os.chmod(DB_PATH, 0o666)
+            else:
+                # Ensure permissions are correct even if writable
+                os.chmod(DB_PATH, 0o666)
+            
+            # Test actual write access by opening the database
+            test_conn = sqlite3.connect(DB_PATH)
+            test_cursor = test_conn.cursor()
+            test_cursor.execute("PRAGMA journal_mode=WAL")
+            test_conn.commit()
+            test_conn.close()
+        except (OSError, sqlite3.Error) as e:
+            print(f"Warning: Could not verify/fix database file permissions: {e}")
+            raise
 
 def get_session():
     """세션 제너레이터"""
