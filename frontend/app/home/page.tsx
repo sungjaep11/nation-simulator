@@ -741,6 +741,9 @@ export default function Home() {
   const prevMilitaryDataRef = useRef<MilitaryUnit[]>([]);
   const commandLogsScrollRef = useRef<HTMLDivElement>(null);
   const [territories, setTerritories] = useState<Array<{id: string; name: string; owner: "goguryeo" | "baekje" | "silla" | "neutral"}>>([]);
+  const [showEnding, setShowEnding] = useState(false);
+  const [endingVideoFaded, setEndingVideoFaded] = useState(false);
+  const endingVideoRef = useRef<HTMLVideoElement>(null);
 
   const nationInfo = {
     goguryeo: {
@@ -1406,7 +1409,7 @@ export default function Home() {
               if (territoriesResponse.ok) {
                 const territoriesData = await territoriesResponse.json() as Array<{id: number; name: string; owner: string}>;
                 setTerritories(territoriesData.map(t => ({
-                  id: t.id,
+                  id: String(t.id),
                   name: t.name,
                   owner: (t.owner === "goguryeo" || t.owner === "baekje" || t.owner === "silla" ? t.owner : "neutral") as "goguryeo" | "baekje" | "silla" | "neutral"
                 })));
@@ -1464,12 +1467,60 @@ export default function Home() {
 
   // BGM 자동 재생
   useEffect(() => {
-    if (mounted && bgmRef.current) {
+    if (mounted && bgmRef.current && !showEnding) {
       bgmRef.current.play().catch((error) => {
         console.log("BGM 자동 재생 실패:", error);
       });
     }
-  }, [mounted]);
+  }, [mounted, showEnding]);
+
+  // 엔딩 조건 체크: 모든 다른 나라가 정복되었는지 확인
+  useEffect(() => {
+    if (!selectedNation || territories.length === 0 || showEnding) return;
+
+    // 다른 두 국가의 영토가 있는지 확인
+    const otherNations: NationId[] = ["goguryeo", "baekje", "silla"].filter(
+      (n) => n !== selectedNation
+    ) as NationId[];
+
+    const hasOtherNationTerritories = territories.some(
+      (t) => otherNations.includes(t.owner as NationId)
+    );
+
+    // 다른 국가의 영토가 하나도 없으면 엔딩
+    if (!hasOtherNationTerritories) {
+      setShowEnding(true);
+      // BGM 정지
+      if (bgmRef.current) {
+        bgmRef.current.pause();
+      }
+      // 엔딩 영상 재생
+      setTimeout(() => {
+        if (endingVideoRef.current) {
+          endingVideoRef.current.play().catch((error) => {
+            console.log("엔딩 영상 재생 실패:", error);
+          });
+        }
+      }, 500);
+    }
+  }, [territories, selectedNation, showEnding]);
+
+  // 엔딩 영상 종료 시 fade out
+  useEffect(() => {
+    if (!showEnding || !endingVideoRef.current) return;
+
+    const video = endingVideoRef.current;
+
+    const handleEnded = () => {
+      setEndingVideoFaded(true);
+    };
+
+    video.addEventListener("ended", handleEnded);
+
+    return () => {
+      video.removeEventListener("ended", handleEnded);
+    };
+  }, [showEnding]);
 
   if (!mounted) {
     return (
@@ -1496,6 +1547,17 @@ export default function Home() {
     );
   }
 
+  // 엔딩 영상 파일명 매핑
+  const getEndingVideoPath = (nation: NationType): string => {
+    if (!nation) return "";
+    const videoMap: Record<NationId, string> = {
+      goguryeo: "/home/goguryeo_ending.mp4",
+      baekje: "/home/baekjae_ending.mp4",
+      silla: "/home/shilla_ending.mp4",
+    };
+    return videoMap[nation];
+  };
+
   return (
     <>
       <audio
@@ -1511,14 +1573,44 @@ export default function Home() {
         preload="auto"
         style={{ display: 'none' }}
       />
+      
+      {/* 엔딩 영상 오버레이 */}
+      {showEnding && selectedNation && (
+        <div 
+          className="fixed inset-0 z-[9999] bg-black"
+          style={{ 
+            opacity: endingVideoFaded ? 1 : 1,
+            transition: endingVideoFaded ? 'opacity 2s ease-in-out' : 'none'
+          }}
+        >
+          {!endingVideoFaded && (
+            <video
+              ref={endingVideoRef}
+              src={getEndingVideoPath(selectedNation)}
+              className="w-full h-full object-contain"
+              onEnded={() => {
+                setEndingVideoFaded(true);
+              }}
+              style={{
+                opacity: 1,
+                transition: 'opacity 2s ease-in-out',
+              }}
+            />
+          )}
+        </div>
+      )}
+
       <div 
-        className="min-h-screen flex flex-col"
+        className={`min-h-screen flex flex-col ${
+          showEnding ? 'opacity-0 pointer-events-none' : 'opacity-100'
+        }`}
         style={{
           backgroundImage: 'url(/background2.jpg)',
           backgroundSize: 'cover',
           backgroundPosition: 'center',
           backgroundAttachment: 'fixed',
           backgroundRepeat: 'no-repeat',
+          transition: showEnding ? 'opacity 0.5s ease-in-out' : 'none',
         }}
       >
         <div className="absolute inset-0 bg-[#0d0d0d]/60"></div>
