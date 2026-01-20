@@ -1,21 +1,197 @@
-from fastapi import FastAPI, Depends, HTTPException, Body
+from fastapi import FastAPI, Depends, HTTPException, Body, Query, Header
 from fastapi.middleware.cors import CORSMiddleware
 from sqlmodel import Session, select
-from datetime import datetime
+from datetime import datetime, timedelta
 import random
 import asyncio
-from backend.database import engine, create_db_and_tables, get_session
-from backend.models import Country, CommandLog, NewsItem, MilitaryUnit, Diplomacy, SecretIntelligence
-from backend.ai_service import get_gemini_game_data, get_ai_country_turn
+from database import engine, create_db_and_tables, get_session
+from models import Country, CommandLog, NewsItem, MilitaryUnit, Diplomacy, SecretIntelligence, User
+from ai_service import get_gemini_game_data, get_ai_country_turn
+import httpx
+import os
+import jwt
+from dotenv import load_dotenv
+import traceback
+import bcrypt
+import hashlib
+import logging
+
+# 로깅 설정
+logger = logging.getLogger(__name__)
+
+def hash_password(password: str) -> str:
+    """
+    비밀번호 해싱 (SHA-256 사전 해싱 + Bcrypt)
+    Bcrypt의 72바이트 제한을 피하기 위해 SHA-256으로 먼저 해싱한 후 Bcrypt 적용
+    """
+    # 1단계: SHA-256으로 사전 해싱 (64글자 고정)
+    # hexdigest()로 문자열을 얻은 뒤, bcrypt가 처리할 수 있게 다시 bytes로 인코딩
+    sha256_hash = hashlib.sha256(password.encode('utf-8')).hexdigest().encode('utf-8')
+    
+    # 2단계: Bcrypt로 암호화
+    # bcrypt.hashpw는 bytes를 반환하므로, DB 저장을 위해 .decode()로 문자열로 변환
+    return bcrypt.hashpw(sha256_hash, bcrypt.gensalt()).decode('utf-8')
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    """
+    비밀번호 검증 (SHA-256 사전 해싱 + Bcrypt)
+    """
+    # 1단계: 입력값 SHA-256 사전 해싱
+    sha256_hash = hashlib.sha256(plain_password.encode('utf-8')).hexdigest().encode('utf-8')
+    
+    # 2단계: Bcrypt 검증
+    # DB에 저장된 hashed_password는 문자열이므로 bytes로 인코딩해서 비교
+    # checkpw(입력된_비밀번호_bytes, 저장된_해시_bytes)
+    return bcrypt.checkpw(sha256_hash, hashed_password.encode('utf-8'))
+
+load_dotenv()
+
+# Google OAuth configuration
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
+GOOGLE_ISSUER = "https://accounts.google.com"
+GOOGLE_JWKS_URL = "https://www.googleapis.com/oauth2/v3/certs"
 
 app = FastAPI()
 
+# CORS configuration for frontend-backend communication
+origins = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=origins,
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ===== JWT Validation =====
+
+async def verify_google_jwt(token: str) -> dict:
+    """
+    Google JWT 토큰을 Google의 공개 키로 검증
+    Google tokeninfo API를 사용하여 토큰 검증
+    
+    Args:
+        token: Google에서 받은 JWT 토큰
+        
+    Returns:
+        검증된 토큰의 payload (사용자 정보 포함)
+        
+    Raises:
+        HTTPException: 토큰 검증 실패 시
+    """
+    try:
+        if not GOOGLE_CLIENT_ID:
+            raise HTTPException(
+                status_code=500, 
+                detail="GOOGLE_CLIENT_ID가 설정되지 않았습니다. backend/.env 파일을 확인하세요."
+            )
+        
+        # Google tokeninfo API를 사용하여 토큰 검증
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                "https://oauth2.googleapis.com/tokeninfo",
+                params={"id_token": token},
+                timeout=10.0
+            )
+            
+            if response.status_code != 200:
+                error_text = response.text
+                raise HTTPException(
+                    status_code=401,
+                    detail=f"Google 토큰 검증에 실패했습니다: {error_text}"
+                )
+            
+            token_data = response.json()
+            
+            # Audience (Client ID) 검증
+            if token_data.get("aud") != GOOGLE_CLIENT_ID:
+                raise HTTPException(
+                    status_code=401,
+                    detail="토큰의 Client ID가 일치하지 않습니다."
+                )
+            
+            # Issuer 검증
+            if token_data.get("iss") not in [GOOGLE_ISSUER, "accounts.google.com", "https://accounts.google.com"]:
+                raise HTTPException(
+                    status_code=401,
+                    detail="유효하지 않은 토큰 발행자입니다."
+                )
+            
+            # Expiration 검증 (tokeninfo API가 이미 검증하지만, 추가 확인)
+            exp = token_data.get("exp")
+            if exp:
+                import time
+                # exp가 문자열일 수 있으므로 int로 변환
+                exp_int = int(exp) if isinstance(exp, (int, str)) else None
+                current_time = int(time.time())
+                if exp_int and current_time > exp_int:
+                    raise HTTPException(status_code=401, detail="토큰이 만료되었습니다.")
+            
+            return token_data
+        
+    except HTTPException:
+        raise
+    except httpx.HTTPError as e:
+        error_msg = f"Google API 호출 중 오류가 발생했습니다: {str(e)}"
+        print(f"Google API Error: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=error_msg)
+    except Exception as e:
+        error_msg = f"토큰 검증 중 오류가 발생했습니다: {str(e)}"
+        print(f"JWT Verification Error: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=error_msg)
+
+
+def create_session_token(user_id: int, email: str) -> str:
+    """
+    사용자 세션을 위한 JWT 토큰 생성
+    
+    Args:
+        user_id: 사용자 ID
+        email: 사용자 이메일
+        
+    Returns:
+        세션 JWT 토큰
+    """
+    secret_key = os.getenv("JWT_SECRET_KEY", "your-secret-key-change-in-production")
+    expiration = datetime.utcnow() + timedelta(days=7)  # 7일 유효
+    
+    payload = {
+        "user_id": user_id,
+        "email": email,
+        "exp": expiration,
+        "iat": datetime.utcnow()
+    }
+    
+    token = jwt.encode(payload, secret_key, algorithm="HS256")
+    return token
+
+
+def verify_session_token(token: str) -> dict:
+    """
+    세션 토큰 검증
+    
+    Args:
+        token: 세션 JWT 토큰
+        
+    Returns:
+        검증된 토큰의 payload
+        
+    Raises:
+        HTTPException: 토큰 검증 실패 시
+    """
+    try:
+        secret_key = os.getenv("JWT_SECRET_KEY", "your-secret-key-change-in-production")
+        payload = jwt.decode(token, secret_key, algorithms=["HS256"])
+        return payload
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="세션이 만료되었습니다.")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="유효하지 않은 세션 토큰입니다.")
+
 
 # ===== 유틸리티 함수 =====
 
@@ -32,10 +208,11 @@ def check_spy_intelligence_leak(country_id: str, session: Session) -> dict:
     leaked_intel = {}
     
     # 이 국가의 모든 스파이 검색
+    # SQLModel columns support .in_() method - type checker limitation, works at runtime
     spy_units = session.exec(
         select(MilitaryUnit).where(
             (MilitaryUnit.countryID == country_id) & 
-            (MilitaryUnit.unit_type.in_(["spy", "assassin", "scout", "infiltrator"]))
+            (MilitaryUnit.unit_type.in_(["spy", "assassin", "scout", "infiltrator"]))  # type: ignore
         )
     ).all()
     
@@ -110,24 +287,352 @@ async def status():
     return {"status": "ok"}
 
 @app.post("/api/reset")
-async def reset_game(session: Session = Depends(get_session)):
-    """게임 데이터 초기화 - 로그인 시 호출"""
+async def reset_game(
+    session_token: str = Body(..., embed=True),
+    session: Session = Depends(get_session)
+):
+    """게임 데이터 초기화 - 사용자별로 초기화"""
     try:
-        initialize_game_data(session)
+        # 세션 토큰에서 사용자 ID 추출
+        token_payload = verify_session_token(session_token)
+        user_id = token_payload.get("user_id")
+        
+        if not user_id:
+            raise HTTPException(status_code=401, detail="유효하지 않은 세션 토큰입니다.")
+        
+        initialize_game_data(session, user_id)
         return {"message": "게임 데이터가 초기화되었습니다.", "status": "success"}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"초기화 중 오류가 발생했습니다: {str(e)}")
 
-@app.get("/api/country/{country_id}")
-async def get_country(country_id: str, session: Session = Depends(get_session)):
-    """특정 국가의 현재 상태 조회"""
-    statement = select(Country).where(Country.id == country_id)
-    country = session.exec(statement).first()
-    if not country:
-        raise HTTPException(status_code=404, detail="국가를 찾을 수 없습니다.")
+@app.post("/api/auth/google")
+async def verify_google_token(
+    credential: str = Body(..., embed=True),
+    session: Session = Depends(get_session)
+):
+    """
+    Google JWT 토큰 검증 및 사용자 세션 생성
     
+    1. Google의 공개 키로 JWT 검증
+    2. 사용자 정보 추출 및 DB 저장/업데이트
+    3. 세션 토큰 생성 및 반환
+    """
+    try:
+        # Google의 공개 키로 JWT 검증
+        token_payload = await verify_google_jwt(credential)
+        
+        # 토큰에서 사용자 정보 추출
+        google_id = token_payload.get("sub")
+        email = token_payload.get("email")
+        name = token_payload.get("name") or token_payload.get("given_name") or "User"
+        picture = token_payload.get("picture")
+        
+        if not google_id or not email:
+            raise HTTPException(
+                status_code=400,
+                detail="토큰에서 필요한 사용자 정보를 가져올 수 없습니다."
+            )
+        
+        # 기존 사용자 확인 (Google ID로 먼저 확인)
+        statement = select(User).where(User.google_id == google_id)
+        user = session.exec(statement).first()
+        is_new_user = False
+        
+        if user:
+            # 기존 Google 사용자 정보 업데이트
+            user.email = email
+            user.name = name
+            user.picture = picture
+            user.last_login = datetime.utcnow()
+        else:
+            # 이메일로도 확인 (이메일 계정이 이미 있는 경우)
+            existing_email_user = session.exec(select(User).where(User.email == email)).first()
+            if existing_email_user:
+                # 이메일 계정이 있으면 Google ID 연결
+                existing_email_user.google_id = google_id
+                existing_email_user.name = name
+                existing_email_user.picture = picture
+                existing_email_user.last_login = datetime.utcnow()
+                user = existing_email_user
+            else:
+                # 완전히 새 사용자 생성
+                is_new_user = True
+                user = User(
+                    google_id=google_id,
+                    email=email,
+                    name=name,
+                    picture=picture
+                )
+                session.add(user)
+        
+        session.commit()
+        session.refresh(user)
+        
+        # user.id가 None인 경우 에러 처리
+        if user.id is None:
+            raise HTTPException(
+                status_code=500,
+                detail="사용자 ID를 가져올 수 없습니다."
+            )
+        
+        user_id = user.id  # Type narrowing
+        
+        # 세션 토큰 생성
+        session_token = create_session_token(user_id, user.email)
+        
+        # 게임 데이터 확인 및 초기화
+        existing_countries = session.exec(
+            select(Country).where(Country.user_id == user_id)
+        ).first()
+        
+        # 게임 데이터가 없으면 초기화 (새 사용자 또는 기존 사용자의 첫 게임)
+        if not existing_countries:
+            initialize_game_data(session, user_id)
+        
+        return {
+            "message": "Google 로그인 성공",
+            "status": "success",
+            "session_token": session_token,
+            "is_new_user": is_new_user,
+            "user": {
+                "id": user.id,
+                "email": user.email,
+                "name": user.name,
+                "picture": user.picture
+            }
+        }
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        error_msg = f"로그인 처리 중 오류가 발생했습니다: {str(e)}"
+        print(f"Google Auth Error: {traceback.format_exc()}")
+        raise HTTPException(
+            status_code=500,
+            detail=error_msg
+        )
+
+@app.post("/api/user/username")
+async def update_username(
+    username: str = Body(..., embed=True),
+    session_token: str = Body(..., embed=True),
+    session: Session = Depends(get_session)
+):
+    """사용자명 업데이트 및 게임 초기화"""
+    try:
+        # 세션 토큰에서 사용자 ID 추출
+        token_payload = verify_session_token(session_token)
+        user_id = token_payload.get("user_id")
+        
+        if not user_id:
+            raise HTTPException(status_code=401, detail="유효하지 않은 세션 토큰입니다.")
+        
+        # 사용자명 검증
+        if not username or len(username.strip()) < 2:
+            raise HTTPException(status_code=400, detail="사용자명은 최소 2자 이상이어야 합니다.")
+        if len(username.strip()) > 20:
+            raise HTTPException(status_code=400, detail="사용자명은 20자 이하여야 합니다.")
+        
+        # 사용자 정보 업데이트
+        user = session.exec(select(User).where(User.id == user_id)).first()
+        if user:
+            user.name = username.strip()
+            session.add(user)
+            session.commit()
+        
+        # 게임 데이터 초기화 (없을 때만)
+        existing_countries = session.exec(
+            select(Country).where(Country.user_id == user_id)
+        ).first()
+        if not existing_countries:
+            initialize_game_data(session, user_id)
+        
+        return {
+            "message": "사용자명이 설정되었습니다.",
+            "status": "success",
+            "username": username.strip()
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"사용자명 설정 중 오류가 발생했습니다: {str(e)}"
+        )
+
+@app.post("/api/register")
+async def register_user(
+    email: str = Body(..., embed=True),
+    username: str = Body(..., embed=True),
+    password: str = Body(..., embed=True),
+    session: Session = Depends(get_session)
+):
+    """이메일/비밀번호로 회원가입"""
+    try:
+        # 입력 검증
+        if not email or not username or not password:
+            raise HTTPException(status_code=400, detail="모든 필드를 입력해주세요.")
+        
+        if len(username.strip()) < 2 or len(username.strip()) > 20:
+            raise HTTPException(status_code=400, detail="사용자명은 2-20자 사이여야 합니다.")
+        
+        if len(password) < 6:
+            raise HTTPException(status_code=400, detail="비밀번호는 최소 6자 이상이어야 합니다.")
+        
+        # 사전 해싱 방식을 사용하므로 비밀번호 길이 제한 없음 (SHA-256으로 처리)
+        
+        # 이메일 중복 확인
+        existing_user = session.exec(select(User).where(User.email == email)).first()
+        if existing_user:
+            raise HTTPException(status_code=400, detail="이미 사용 중인 이메일입니다.")
+        
+        # 비밀번호 해싱 (hash_password 함수 내에서도 안전하게 처리됨)
+        password_hash = hash_password(password)
+        
+        # 새 사용자 생성
+        new_user = User(
+            email=email.strip(),
+            name=username.strip(),
+            password_hash=password_hash,
+            google_id=None
+        )
+        session.add(new_user)
+        session.commit()
+        session.refresh(new_user)
+        
+        if new_user.id is None:
+            raise HTTPException(status_code=500, detail="사용자 생성에 실패했습니다.")
+        
+        user_id = new_user.id  # Type narrowing
+        
+        # 세션 토큰 생성
+        session_token = create_session_token(user_id, new_user.email)
+        
+        # 게임 데이터 초기화
+        initialize_game_data(session, user_id)
+        
+        return {
+            "message": "회원가입 성공",
+            "status": "success",
+            "session_token": session_token,
+            "user": {
+                "id": new_user.id,
+                "email": new_user.email,
+                "name": new_user.name
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"회원가입 중 오류가 발생했습니다: {str(e)}"
+        )
+
+@app.post("/api/login")
+async def login_user(
+    email: str = Body(..., embed=True),
+    password: str = Body(..., embed=True),
+    session: Session = Depends(get_session)
+):
+    """이메일/비밀번호로 로그인"""
+    try:
+        if not email or not password:
+            raise HTTPException(status_code=400, detail="이메일과 비밀번호를 입력해주세요.")
+        
+        # 사용자 찾기
+        user = session.exec(select(User).where(User.email == email)).first()
+        if not user:
+            logger.info(f"로그인 실패: 이메일을 찾을 수 없음 - {email}")
+            raise HTTPException(status_code=401, detail="이메일 또는 비밀번호가 올바르지 않습니다.")
+        
+        # 비밀번호 확인
+        if not user.password_hash:
+            logger.info(f"로그인 실패: 비밀번호 해시가 없음 - {email}")
+            raise HTTPException(status_code=401, detail="이 계정은 비밀번호 로그인을 지원하지 않습니다.")
+        
+        if not verify_password(password, user.password_hash):
+            logger.info(f"로그인 실패: 비밀번호 불일치 - {email}")
+            raise HTTPException(status_code=401, detail="이메일 또는 비밀번호가 올바르지 않습니다.")
+        
+        # 로그인 시간 업데이트
+        user.last_login = datetime.utcnow()
+        session.add(user)
+        session.commit()
+        
+        if user.id is None:
+            raise HTTPException(status_code=500, detail="사용자 ID를 가져올 수 없습니다.")
+        
+        user_id = user.id  # Type narrowing
+        
+        # 세션 토큰 생성
+        session_token = create_session_token(user_id, user.email)
+        
+        # 게임 데이터 확인 및 초기화 (없으면 초기화)
+        existing_countries = session.exec(
+            select(Country).where(Country.user_id == user_id)
+        ).first()
+        
+        if not existing_countries:
+            initialize_game_data(session, user_id)
+        
+        logger.info(f"로그인 성공: {email} (user_id: {user_id})")
+        
+        return {
+            "message": "로그인 성공",
+            "status": "success",
+            "session_token": session_token,
+            "user": {
+                "id": user.id,
+                "email": user.email,
+                "name": user.name,
+                "picture": user.picture
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"로그인 중 오류가 발생했습니다: {str(e)}"
+        )
+
+@app.get("/api/country/{country_id}")
+async def get_country(
+    country_id: str, 
+    session_token: str = Query(..., description="Session token"),
+    session: Session = Depends(get_session)
+):
+    """특정 국가의 현재 상태 조회 (사용자별)"""
+    try:
+        # 세션 토큰에서 사용자 ID 추출
+        token_payload = verify_session_token(session_token)
+        user_id = token_payload.get("user_id")
+        
+        if not user_id:
+            raise HTTPException(status_code=401, detail="유효하지 않은 세션 토큰입니다.")
+        
+        # 프론트엔드에서 받은 country_id를 사용자별 고유 ID로 변환
+        # 예: 'goguryeo' -> 'goguryeo_2' (user_id가 2인 경우)
+        user_specific_country_id = f"{country_id}_{user_id}"
+        
+        # 해당 사용자의 국가만 조회
+        statement = select(Country).where(
+            (Country.id == user_specific_country_id) & (Country.user_id == user_id)
+        )
+        country = session.exec(statement).first()
+        if not country:
+            raise HTTPException(status_code=404, detail="국가를 찾을 수 없습니다.")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"국가 조회 중 오류가 발생했습니다: {str(e)}")
+    
+    # 프론트엔드에 반환할 때는 원래 country_id만 반환 (user_id 제거)
     return {
-        "id": country.id,
+        "id": country_id,  # 원래 country_id 반환 (goguryeo, baekje, silla)
         "name": country.name,
         "finance": country.finance,
         "population": country.population,
@@ -168,10 +673,39 @@ async def get_all_countries(session: Session = Depends(get_session)):
     ]
 
 @app.get("/api/country/{country_id}/news")
-async def get_country_news(country_id: str, session: Session = Depends(get_session)):
-    """특정 국가의 뉴스 조회"""
-    statement = select(NewsItem).where(NewsItem.countryID == country_id)
-    news_items = session.exec(statement).all()
+async def get_country_news(
+    country_id: str,
+    session_token: str = Query(..., description="Session token"),
+    session: Session = Depends(get_session)
+):
+    """특정 국가의 뉴스 조회 (사용자별)"""
+    try:
+        # 세션 토큰에서 사용자 ID 추출
+        token_payload = verify_session_token(session_token)
+        user_id = token_payload.get("user_id")
+        
+        if not user_id:
+            raise HTTPException(status_code=401, detail="유효하지 않은 세션 토큰입니다.")
+        
+        # 프론트엔드에서 받은 country_id를 사용자별 고유 ID로 변환
+        user_specific_country_id = f"{country_id}_{user_id}"
+        
+        # 해당 사용자의 국가인지 확인
+        country = session.exec(
+            select(Country).where(
+                (Country.id == user_specific_country_id) & (Country.user_id == user_id)
+            )
+        ).first()
+        
+        if not country:
+            raise HTTPException(status_code=404, detail="국가를 찾을 수 없습니다.")
+        
+        statement = select(NewsItem).where(NewsItem.countryID == user_specific_country_id)
+        news_items = session.exec(statement).all()
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"뉴스 조회 중 오류가 발생했습니다: {str(e)}")
     
     return [
         {
@@ -184,10 +718,39 @@ async def get_country_news(country_id: str, session: Session = Depends(get_sessi
     ]
 
 @app.get("/api/country/{country_id}/military")
-async def get_military_units(country_id: str, session: Session = Depends(get_session)):
-    """특정 국가의 군대 구성 조회"""
-    statement = select(MilitaryUnit).where(MilitaryUnit.countryID == country_id)
-    units = session.exec(statement).all()
+async def get_military_units(
+    country_id: str,
+    session_token: str = Query(..., description="Session token"),
+    session: Session = Depends(get_session)
+):
+    """특정 국가의 군대 구성 조회 (사용자별)"""
+    try:
+        # 세션 토큰에서 사용자 ID 추출
+        token_payload = verify_session_token(session_token)
+        user_id = token_payload.get("user_id")
+        
+        if not user_id:
+            raise HTTPException(status_code=401, detail="유효하지 않은 세션 토큰입니다.")
+        
+        # 프론트엔드에서 받은 country_id를 사용자별 고유 ID로 변환
+        user_specific_country_id = f"{country_id}_{user_id}"
+        
+        # 해당 사용자의 국가인지 확인
+        country = session.exec(
+            select(Country).where(
+                (Country.id == user_specific_country_id) & (Country.user_id == user_id)
+            )
+        ).first()
+        
+        if not country:
+            raise HTTPException(status_code=404, detail="국가를 찾을 수 없습니다.")
+        
+        statement = select(MilitaryUnit).where(MilitaryUnit.countryID == user_specific_country_id)
+        units = session.exec(statement).all()
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"군대 구성 조회 중 오류가 발생했습니다: {str(e)}")
     
     return [
         {
@@ -200,10 +763,39 @@ async def get_military_units(country_id: str, session: Session = Depends(get_ses
     ]
 
 @app.get("/api/country/{country_id}/diplomacy")
-async def get_diplomacy(country_id: str, session: Session = Depends(get_session)):
-    """특정 국가의 외교 관계 조회"""
-    statement = select(Diplomacy).where(Diplomacy.sourceID == country_id)
-    relations = session.exec(statement).all()
+async def get_diplomacy(
+    country_id: str,
+    session_token: str = Query(..., description="Session token"),
+    session: Session = Depends(get_session)
+):
+    """특정 국가의 외교 관계 조회 (사용자별)"""
+    try:
+        # 세션 토큰에서 사용자 ID 추출
+        token_payload = verify_session_token(session_token)
+        user_id = token_payload.get("user_id")
+        
+        if not user_id:
+            raise HTTPException(status_code=401, detail="유효하지 않은 세션 토큰입니다.")
+        
+        # 프론트엔드에서 받은 country_id를 사용자별 고유 ID로 변환
+        user_specific_country_id = f"{country_id}_{user_id}"
+        
+        # 해당 사용자의 국가인지 확인
+        country = session.exec(
+            select(Country).where(
+                (Country.id == user_specific_country_id) & (Country.user_id == user_id)
+            )
+        ).first()
+        
+        if not country:
+            raise HTTPException(status_code=404, detail="국가를 찾을 수 없습니다.")
+        
+        statement = select(Diplomacy).where(Diplomacy.sourceID == user_specific_country_id)
+        relations = session.exec(statement).all()
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"외교 관계 조회 중 오류가 발생했습니다: {str(e)}")
     
     return [
         {
@@ -216,10 +808,40 @@ async def get_diplomacy(country_id: str, session: Session = Depends(get_session)
     ]
 
 @app.get("/api/country/{country_id}/logs")
-async def get_command_logs(country_id: str, session: Session = Depends(get_session)):
-    """특정 국가의 명령 기록 조회"""
-    statement = select(CommandLog).where(CommandLog.countryID == country_id).order_by(CommandLog.timestamp.desc())
-    logs = session.exec(statement).all()
+async def get_command_logs(
+    country_id: str,
+    session_token: str = Query(..., description="Session token"),
+    session: Session = Depends(get_session)
+):
+    """특정 국가의 명령 기록 조회 (사용자별)"""
+    try:
+        # 세션 토큰에서 사용자 ID 추출
+        token_payload = verify_session_token(session_token)
+        user_id = token_payload.get("user_id")
+        
+        if not user_id:
+            raise HTTPException(status_code=401, detail="유효하지 않은 세션 토큰입니다.")
+        
+        # 프론트엔드에서 받은 country_id를 사용자별 고유 ID로 변환
+        user_specific_country_id = f"{country_id}_{user_id}"
+        
+        # 해당 사용자의 국가인지 확인
+        country = session.exec(
+            select(Country).where(
+                (Country.id == user_specific_country_id) & (Country.user_id == user_id)
+            )
+        ).first()
+        
+        if not country:
+            raise HTTPException(status_code=404, detail="국가를 찾을 수 없습니다.")
+        
+        # Use SQLModel column's desc() method - type checker may show error but works at runtime
+        statement = select(CommandLog).where(CommandLog.countryID == user_specific_country_id).order_by(CommandLog.timestamp.desc())  # type: ignore
+        logs = session.exec(statement).all()
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"명령 기록 조회 중 오류가 발생했습니다: {str(e)}")
     
     return [
         {
@@ -231,30 +853,46 @@ async def get_command_logs(country_id: str, session: Session = Depends(get_sessi
         for l in logs
     ]
 
-def initialize_game_data(session: Session):
-    """게임 데이터 초기화 함수"""
-    # 모든 기존 데이터 삭제
-    for log in session.exec(select(CommandLog)).all():
-        session.delete(log)
-    for news in session.exec(select(NewsItem)).all():
-        session.delete(news)
-    for intel in session.exec(select(SecretIntelligence)).all():
-        session.delete(intel)
-    for unit in session.exec(select(MilitaryUnit)).all():
-        session.delete(unit)
-    for diplomacy in session.exec(select(Diplomacy)).all():
-        session.delete(diplomacy)
+def initialize_game_data(session: Session, user_id: int):
+    """사용자별 게임 데이터 초기화 함수"""
+    # 해당 사용자의 기존 게임 데이터 삭제
+    user_countries = session.exec(select(Country).where(Country.user_id == user_id)).all()
+    country_ids = [c.id for c in user_countries]
     
-    # 모든 국가 삭제 후 재생성
-    for country in session.exec(select(Country)).all():
-        session.delete(country)
+    if country_ids:
+        # 해당 사용자의 모든 게임 데이터 삭제
+        for country_id in country_ids:
+            # CommandLog 삭제
+            logs = session.exec(select(CommandLog).where(CommandLog.countryID == country_id)).all()
+            for log in logs:
+                session.delete(log)
+            # NewsItem 삭제
+            news = session.exec(select(NewsItem).where(NewsItem.countryID == country_id)).all()
+            for item in news:
+                session.delete(item)
+            # SecretIntelligence 삭제
+            intel = session.exec(select(SecretIntelligence).where(SecretIntelligence.countryID == country_id)).all()
+            for item in intel:
+                session.delete(item)
+            # MilitaryUnit 삭제
+            units = session.exec(select(MilitaryUnit).where(MilitaryUnit.countryID == country_id)).all()
+            for unit in units:
+                session.delete(unit)
+            # Diplomacy 삭제
+            diplomacy = session.exec(select(Diplomacy).where(Diplomacy.sourceID == country_id)).all()
+            for d in diplomacy:
+                session.delete(d)
+            # Country 삭제
+            for country in user_countries:
+                session.delete(country)
     
     session.commit()
     
-    # 초기 데이터 삽입
+    # 초기 데이터 삽입 (사용자별로 고유한 국가 ID 생성)
     countries = [
         Country(
-            id="goguryeo",
+            id=f"goguryeo_{user_id}",
+            user_id=user_id,
             name="고구려",
             finance=14000,
             population=51000,
@@ -265,7 +903,8 @@ def initialize_game_data(session: Session):
             color="#FF6B6B"
         ),
         Country(
-            id="baekje",
+            id=f"baekje_{user_id}",
+            user_id=user_id,
             name="백제",
             finance=50000,
             population=35000,
@@ -276,7 +915,8 @@ def initialize_game_data(session: Session):
             color="#4ECDC4"
         ),
         Country(
-            id="silla",
+            id=f"silla_{user_id}",
+            user_id=user_id,
             name="신라",
             finance=10000,
             population=70000,
@@ -297,27 +937,44 @@ def initialize_game_data(session: Session):
 @app.on_event("startup")
 def on_startup():
     create_db_and_tables()
-    with Session(engine) as session:
-        if not session.exec(select(Country)).first():
-            initialize_game_data(session)
+    # 게임 데이터는 사용자별로 초기화되므로 여기서는 초기화하지 않음
 
 @app.post("/api/action")
 async def handle_game_turn(
     user_input: str = Body(..., embed=True),
     country_id: str = Body(..., embed=True),
+    session_token: str = Body(..., embed=True),
     session: Session = Depends(get_session)
 ):
-    """게임 턴 처리 - 유저 국가 + AI 국가들 자동 업데이트"""
-    statement = select(Country).where(Country.id == country_id)
-    country = session.exec(statement).first()
-    if not country:
-        raise HTTPException(status_code=404, detail="국가를 찾을 수 없습니다.")
+    """게임 턴 처리 - 유저 국가 + AI 국가들 자동 업데이트 (사용자별)"""
+    try:
+        # 세션 토큰에서 사용자 ID 추출
+        token_payload = verify_session_token(session_token)
+        user_id = token_payload.get("user_id")
+        
+        if not user_id:
+            raise HTTPException(status_code=401, detail="유효하지 않은 세션 토큰입니다.")
+        
+        # 프론트엔드에서 받은 country_id를 사용자별 고유 ID로 변환
+        user_specific_country_id = f"{country_id}_{user_id}"
+        
+        # 해당 사용자의 국가만 조회
+        statement = select(Country).where(
+            (Country.id == user_specific_country_id) & (Country.user_id == user_id)
+        )
+        country = session.exec(statement).first()
+        if not country:
+            raise HTTPException(status_code=404, detail="국가를 찾을 수 없습니다.")
 
-    # 모든 국가 정보 가져오기
-    all_countries_db = session.exec(select(Country)).all()
+        # 해당 사용자의 모든 국가 정보 가져오기
+        all_countries_db = session.exec(select(Country).where(Country.user_id == user_id)).all()
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"게임 턴 처리 중 오류가 발생했습니다: {str(e)}")
     all_countries_dict = {
-        c.id: {
-            "id": c.id,
+        c.id.rsplit("_", 1)[0] if "_" in c.id else c.id: {  # user_id 제거하여 프론트엔드 형식으로 변환
+            "id": c.id.rsplit("_", 1)[0] if "_" in c.id else c.id,
             "name": c.name,
             "finance": c.finance,
             "population": c.population,
@@ -330,7 +987,7 @@ async def handle_game_turn(
     
     # 유저 국가의 외교 정보 가져오기
     diplomacy_relations = session.exec(
-        select(Diplomacy).where(Diplomacy.sourceID == country_id)
+        select(Diplomacy).where(Diplomacy.sourceID == user_specific_country_id)
     ).all()
     user_diplomacy = [
         {
@@ -343,7 +1000,7 @@ async def handle_game_turn(
     
     # 유저 국가의 군사 유닛 정보 가져오기
     military_units = session.exec(
-        select(MilitaryUnit).where(MilitaryUnit.countryID == country_id)
+        select(MilitaryUnit).where(MilitaryUnit.countryID == user_specific_country_id)
     ).all()
     user_military = [
         {
@@ -357,12 +1014,16 @@ async def handle_game_turn(
     
     # 다른 국가들의 외교 및 군사 정보도 수집
     for other_country in all_countries_db:
-        if other_country.id != country_id:
+        # other_country.id는 user_specific 형식 (예: 'goguryeo_2')
+        # all_countries_dict의 키는 원래 형식 (예: 'goguryeo')
+        other_country_original_id = other_country.id.rsplit("_", 1)[0] if "_" in other_country.id else other_country.id
+        
+        if other_country.id != user_specific_country_id:
             # 다른 국가의 외교 정보
             other_diplomacy = session.exec(
                 select(Diplomacy).where(Diplomacy.sourceID == other_country.id)
             ).all()
-            all_countries_dict[other_country.id]["diplomacy"] = [
+            all_countries_dict[other_country_original_id]["diplomacy"] = [
                 {
                     "targetName": d.targetName,
                     "status": d.status,
@@ -375,7 +1036,7 @@ async def handle_game_turn(
             other_military = session.exec(
                 select(MilitaryUnit).where(MilitaryUnit.countryID == other_country.id)
             ).all()
-            all_countries_dict[other_country.id]["military_units"] = [
+            all_countries_dict[other_country_original_id]["military_units"] = [
                 {
                     "name": u.name,
                     "count": u.count,
@@ -568,14 +1229,16 @@ async def handle_game_turn(
     session.commit()
     
     # 스파이 정보 유출 체크
-    spy_leak_info = check_spy_intelligence_leak(country_id, session)
+    spy_leak_info = check_spy_intelligence_leak(user_specific_country_id, session)
     
     # 다른 두 국가 자동 AI 턴 진행 (Gemini 호출 병렬화)
     other_countries_news = {}
     ai_targets = []
     for other_country_db in all_countries_db:
-        if other_country_db.id != country_id:
-            other_stats = all_countries_dict[other_country_db.id].copy()
+        if other_country_db.id != user_specific_country_id:
+            # other_country_db.id는 user_specific 형식, all_countries_dict의 키는 원래 형식
+            other_country_original_id = other_country_db.id.rsplit("_", 1)[0] if "_" in other_country_db.id else other_country_db.id
+            other_stats = all_countries_dict[other_country_original_id].copy()
             ai_targets.append((other_country_db, other_stats))
     ai_results = await asyncio.gather(
         *(get_ai_country_turn(stats, all_countries_dict) for _, stats in ai_targets)
@@ -712,7 +1375,9 @@ async def handle_game_turn(
         session.add(other_country_db)
         
         # 다른 국가 뉴스를 반환 데이터에 포함 + 최신 스탯 반영
-        other_countries_news[other_country_db.id] = {
+        # 프론트엔드에 반환할 때는 원래 country_id 형식 사용
+        other_country_original_id = other_country_db.id.rsplit("_", 1)[0] if "_" in other_country_db.id else other_country_db.id
+        other_countries_news[other_country_original_id] = {
             "name": other_country_db.name,
             "scenario": ai_turn_data.get('scenario', ''),
             "public_news": ai_turn_data.get('public_news', []),

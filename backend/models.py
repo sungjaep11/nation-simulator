@@ -5,6 +5,7 @@ import json
 
 class Country(SQLModel, table=True):
     id: str = Field(primary_key=True)
+    user_id: Optional[int] = Field(default=None, foreign_key="user.id", index=True)  # 게임 데이터를 사용자별로 분리
     name: str = Field(index=True)
     finance: int = 10000
     population: int = 50000
@@ -104,3 +105,15 @@ class Diplomacy(SQLModel, table=True):
     targetName: str
     status: str
     favorability: int = 0
+
+
+class User(SQLModel, table=True):
+    """사용자 정보 - Google OAuth 및 이메일/비밀번호 인증"""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    google_id: Optional[str] = Field(default=None, unique=True, index=True)  # Google user ID (optional)
+    email: str = Field(unique=True, index=True)  # 이메일 (고유)
+    name: str
+    password_hash: Optional[str] = Field(default=None)  # 비밀번호 해시 (이메일 로그인용)
+    picture: Optional[str] = None  # Profile picture URL
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    last_login: datetime = Field(default_factory=datetime.utcnow)

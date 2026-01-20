@@ -736,6 +736,7 @@ export default function Home() {
   const [militaryData, setMilitaryData] = useState<MilitaryUnit[]>([]);
   const prevDiplomacyDataRef = useRef<DiplomacyRelation[]>([]);
   const prevMilitaryDataRef = useRef<MilitaryUnit[]>([]);
+  const commandLogsScrollRef = useRef<HTMLDivElement>(null);
 
   const nationInfo = {
     goguryeo: {
@@ -791,12 +792,18 @@ export default function Home() {
     try {
       // Backend API 호출
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+      const sessionToken = localStorage.getItem("session_token");
+      if (!sessionToken) {
+        throw new Error("세션 토큰이 없습니다. 다시 로그인해주세요.");
+      }
+      
       const response = await fetch(`${apiUrl}/api/action`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           user_input: command,
-          country_id: selectedNation
+          country_id: selectedNation,
+          session_token: sessionToken
         }),
       });
 
@@ -919,7 +926,13 @@ export default function Home() {
       // 모든 국가의 점수 및 통계 업데이트
       try {
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-        const countriesResponse = await fetch(`${apiUrl}/api/countries`);
+        const sessionToken = localStorage.getItem("session_token");
+        if (!sessionToken) {
+          console.error("세션 토큰이 없습니다.");
+          return;
+        }
+        
+        const countriesResponse = await fetch(`${apiUrl}/api/countries?session_token=${encodeURIComponent(sessionToken)}`);
         if (countriesResponse.ok) {
           const countriesData = (await countriesResponse.json()) as Array<{
             id?: unknown;
@@ -961,10 +974,13 @@ export default function Home() {
         
         // 외교 데이터 가져오기
         try {
-          const diplomacyResponse = await fetch(`${apiUrl}/api/country/${selectedNation}/diplomacy`);
-          if (diplomacyResponse.ok) {
-            const diplomacyData = await diplomacyResponse.json() as DiplomacyRelation[];
-            setDiplomacyData(diplomacyData);
+          const sessionToken = localStorage.getItem("session_token");
+          if (sessionToken) {
+            const diplomacyResponse = await fetch(`${apiUrl}/api/country/${selectedNation}/diplomacy?session_token=${encodeURIComponent(sessionToken)}`);
+            if (diplomacyResponse.ok) {
+              const diplomacyData = await diplomacyResponse.json() as DiplomacyRelation[];
+              setDiplomacyData(diplomacyData);
+            }
           }
         } catch (diplomacyError) {
           console.warn("외교 데이터 업데이트 실패:", diplomacyError);
@@ -972,10 +988,13 @@ export default function Home() {
 
         // 군사 데이터 가져오기
         try {
-          const militaryResponse = await fetch(`${apiUrl}/api/country/${selectedNation}/military`);
-          if (militaryResponse.ok) {
-            const militaryData = await militaryResponse.json() as MilitaryUnit[];
-            setMilitaryData(militaryData);
+          const sessionToken = localStorage.getItem("session_token");
+          if (sessionToken) {
+            const militaryResponse = await fetch(`${apiUrl}/api/country/${selectedNation}/military?session_token=${encodeURIComponent(sessionToken)}`);
+            if (militaryResponse.ok) {
+              const militaryData = await militaryResponse.json() as MilitaryUnit[];
+              setMilitaryData(militaryData);
+            }
           }
         } catch (militaryError) {
           console.warn("군사 데이터 업데이트 실패:", militaryError);
@@ -1020,6 +1039,13 @@ export default function Home() {
     }
   }, [turn]);
 
+  // 명령 기록 업데이트 시 스크롤을 맨 밑으로 이동
+  useEffect(() => {
+    if (commandLogsScrollRef.current) {
+      commandLogsScrollRef.current.scrollTop = commandLogsScrollRef.current.scrollHeight;
+    }
+  }, [commandLogs]);
+
   // 백엔드에서 받은 totalScore 사용
   const totalScore = currentTotalScore;
 
@@ -1041,6 +1067,12 @@ export default function Home() {
   // URL에서 국가가 전달되면 자동으로 설정 및 백엔드에서 데이터 로드
   useEffect(() => {
     if (nationFromUrl) {
+      if (isNationId(nationFromUrl)) {
+        const email = localStorage.getItem("email");
+        if (email) {
+          localStorage.setItem(`selected_country:${email}`, nationFromUrl);
+        }
+      }
       setSelectedNation(nationFromUrl);
       
       // 백엔드에서 국가 데이터 가져오기 (실패 시 알림 표시)
@@ -1075,13 +1107,25 @@ export default function Home() {
             const countryTimeoutId = setTimeout(() => countryController.abort(), 5000);
             
             try {
-              const response = await fetch(`${apiUrl}/api/country/${nationFromUrl}`, {
+              const sessionToken = localStorage.getItem("session_token");
+              if (!sessionToken) {
+                throw new Error("세션 토큰이 없습니다. 다시 로그인해주세요.");
+              }
+              
+              const response = await fetch(`${apiUrl}/api/country/${nationFromUrl}?session_token=${encodeURIComponent(sessionToken)}`, {
                 signal: countryController.signal,
               });
               
               clearTimeout(countryTimeoutId);
               
               if (!response.ok) {
+                // 404 오류는 게임 데이터가 없다는 의미
+                if (response.status === 404) {
+                  // selection 페이지로 리다이렉트 (alert 없이)
+                  routerRef.current.push('/selection');
+                  return;
+                }
+                // 그 외의 오류는 연결 실패로 처리
                 connectionFailed = true;
                 errorMessage = `국가 데이터를 가져올 수 없습니다. (${response.status})`;
                 throw new Error(errorMessage);
@@ -1103,7 +1147,12 @@ export default function Home() {
               
               // 모든 국가의 통계 가져오기
               try {
-                const countriesResponse = await fetch(`${apiUrl}/api/countries`, {
+                const sessionToken = localStorage.getItem("session_token");
+                if (!sessionToken) {
+                  throw new Error("세션 토큰이 없습니다.");
+                }
+                
+                const countriesResponse = await fetch(`${apiUrl}/api/countries?session_token=${encodeURIComponent(sessionToken)}`, {
                   signal: countryController.signal,
                 });
                 if (countriesResponse.ok) {
@@ -1160,7 +1209,12 @@ export default function Home() {
             const newsTimeoutId = setTimeout(() => newsController.abort(), 5000);
             
             try {
-              const newsResponse = await fetch(`${apiUrl}/api/country/${nationFromUrl}/news`, {
+              const sessionToken = localStorage.getItem("session_token");
+              if (!sessionToken) {
+                throw new Error("세션 토큰이 없습니다.");
+              }
+              
+              const newsResponse = await fetch(`${apiUrl}/api/country/${nationFromUrl}/news?session_token=${encodeURIComponent(sessionToken)}`, {
                 signal: newsController.signal,
               });
               
@@ -1196,7 +1250,12 @@ export default function Home() {
             const logsTimeoutId = setTimeout(() => logsController.abort(), 5000);
             
             try {
-              const logsResponse = await fetch(`${apiUrl}/api/country/${nationFromUrl}/logs`, {
+              const sessionToken = localStorage.getItem("session_token");
+              if (!sessionToken) {
+                throw new Error("세션 토큰이 없습니다.");
+              }
+              
+              const logsResponse = await fetch(`${apiUrl}/api/country/${nationFromUrl}/logs?session_token=${encodeURIComponent(sessionToken)}`, {
                 signal: logsController.signal,
               });
               
@@ -1233,7 +1292,12 @@ export default function Home() {
             const diplomacyTimeoutId = setTimeout(() => diplomacyController.abort(), 5000);
             
             try {
-              const diplomacyResponse = await fetch(`${apiUrl}/api/country/${nationFromUrl}/diplomacy`, {
+              const sessionToken = localStorage.getItem("session_token");
+              if (!sessionToken) {
+                throw new Error("세션 토큰이 없습니다.");
+              }
+              
+              const diplomacyResponse = await fetch(`${apiUrl}/api/country/${nationFromUrl}/diplomacy?session_token=${encodeURIComponent(sessionToken)}`, {
                 signal: diplomacyController.signal,
               });
               
@@ -1254,7 +1318,12 @@ export default function Home() {
             const militaryTimeoutId = setTimeout(() => militaryController.abort(), 5000);
             
             try {
-              const militaryResponse = await fetch(`${apiUrl}/api/country/${nationFromUrl}/military`, {
+              const sessionToken = localStorage.getItem("session_token");
+              if (!sessionToken) {
+                throw new Error("세션 토큰이 없습니다.");
+              }
+              
+              const militaryResponse = await fetch(`${apiUrl}/api/country/${nationFromUrl}/military?session_token=${encodeURIComponent(sessionToken)}`, {
                 signal: militaryController.signal,
               });
               
@@ -1539,7 +1608,7 @@ export default function Home() {
                 <h3 className="text-xl font-bold text-[#C9A227] font-serif mb-4 flex items-center gap-2">
                   <span>📜</span> 명령 기록
                 </h3>
-                <div className="max-h-[300px] overflow-y-auto space-y-3">
+                <div ref={commandLogsScrollRef} className="max-h-[300px] overflow-y-auto space-y-3">
                   {commandLogs.length === 0 ? (
                     <p className="text-[#6B6B6B] text-center py-8">
                       아직 내린 명령이 없습니다. 하단의 입력창에서 명령을 입력하세요.
