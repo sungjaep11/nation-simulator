@@ -297,11 +297,11 @@ function StatItem({
           </span>
           {typeof change === "number" && change !== 0 && (
             <span
-              className={`text-[10px] font-bold px-1 rounded-sm ml-1 ${
+              className={`text-xs font-bold px-1 rounded-sm ml-1 ${
                 change > 0 ? "text-green-400" : "text-red-400"
               }`}
             >
-              {change > 0 ? "+" : ""}{change.toLocaleString()}
+              {change > 0 ? "▲" : "▼"}
             </span>
           )}
           {shouldShowArrow && (

@@ -130,12 +130,13 @@ async def get_gemini_game_data(user_input: str, current_stats: dict, all_countri
 [유저 명령] "{user_input}"
 
 ### 필수 규칙 ###
-1. changes 필드는 유저의 명령과 생성할 시나리오와 뉴스에 맞게 설정하세요:
+1. changes 필드는 유저의 명령과 생성할 시나리오와 뉴스에 맞게 설정하세요 (절대 모든 값을 0으로 설정하지 마세요):
    - 적극적인 명령(전쟁, 개혁, 건설): 큰 변화 (finance/population: -100~100, happiness, military: -10~10)
    - 소극적인 명령(내정, 평화): 작은 변화 (finance/population: -20~20, happiness, military: -5~5)
    - 군사 증강: military 1~5 증가, finance 감소
    - 외교: happiness, favorability 변화
    - 실패/저항: 음수 변화
+   - **중요: 명령에 따라 적절한 변화값을 반드시 설정하세요. 모든 값을 0으로 설정하면 안 됩니다.**
 
 2. 명령 해석 (이것이 매우 중요):
    - "전쟁", "침략", "공격", "정복" → war 액션 생성 필수. **반드시 전면전으로 처리. outcome은 50% 확률로 "승리" 또는 "패배". land_gained/land_lost는 최소 3~10 영토 변화**
@@ -183,7 +184,7 @@ async def get_gemini_game_data(user_input: str, current_stats: dict, all_countri
         "평화로운 외교 담판 진행"
     ],
     "secret_news": ["비밀 정보나 작전 내용"],
-    "changes": {{"finance": 0, "population": 0, "military": 0, "happiness": 0}},
+    "changes": {{"finance": -50, "population": 100, "military": 3, "happiness": 5}},
     "actions": [
         {{"type": "add_military", "name": "철기병", "count": 50, "icon": "🐎", "unit_type": "regular"}},
         {{"type": "war", "target": "고구려", "outcome": "승리", "land_gained": 5, "land_lost": 0, "casualties": 200}}

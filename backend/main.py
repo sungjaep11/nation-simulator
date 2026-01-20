@@ -1094,11 +1094,6 @@ async def handle_game_turn(
     changes = ai_data.get('changes', {})
     actions = ai_data.get('actions', [])
 
-    # 군사 관련 액션이 없으면 군사력 변화는 0으로 강제 (임의 증가 방지)
-    has_military_action = any(a.get('type') in ['add_military', 'war'] for a in actions)
-    if not has_military_action and 'military' in changes:
-        changes['military'] = 0
-    
     # DB에 변화값 저장
     country.last_finance_change = changes.get('finance', 0)
     country.last_population_change = changes.get('population', 0)
