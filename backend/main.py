@@ -267,6 +267,65 @@ def check_spy_intelligence_leak(country_id: str, session: Session) -> dict:
 
 SPY_UNIT_TYPES = {"spy", "assassin", "scout", "infiltrator"}
 
+# 외교 상태 영문 -> 한글 변환 매핑
+DIPLOMACY_STATUS_EN_TO_KR = {
+    "neutral": "중립",
+    "alliance": "동맹",
+    "ally": "동맹",
+    "allied": "동맹",
+    "hostile": "적대",
+    "enemy": "적대",
+    "war": "적대",
+    "friendly": "우호",
+    "friend": "우호",
+}
+
+def normalize_diplomacy_status(status: str) -> str:
+    """
+    외교 상태값을 한글로 정규화합니다.
+    AI가 영문으로 반환한 경우 한글로 변환합니다.
+    
+    Args:
+        status: 외교 상태값 (영문 또는 한글)
+    
+    Returns:
+        한글로 정규화된 상태값 ("동맹", "중립", "적대" 중 하나)
+    """
+    if not status:
+        return "중립"
+    
+    # 이미 한글인 경우 그대로 반환
+    if status in ["동맹", "중립", "적대", "우호"]:
+        return status
+    
+    # 영문인 경우 변환
+    status_lower = status.lower().strip()
+    return DIPLOMACY_STATUS_EN_TO_KR.get(status_lower, "중립")
+
+
+def sanitize_ai_response_diplomacy(ai_data: dict) -> dict:
+    """
+    AI 응답에서 diplomacy 액션의 status 값을 한글로 보정합니다.
+    
+    Args:
+        ai_data: AI가 반환한 응답 데이터
+    
+    Returns:
+        status 값이 한글로 보정된 응답 데이터
+    """
+    if 'actions' not in ai_data:
+        return ai_data
+    
+    for action in ai_data.get('actions', []):
+        if action.get('type') == 'diplomacy':
+            original_status = action.get('status', '')
+            normalized_status = normalize_diplomacy_status(original_status)
+            if original_status != normalized_status:
+                print(f"🔄 [데이터 보정] 외교 status 변환: '{original_status}' -> '{normalized_status}'")
+            action['status'] = normalized_status
+    
+    return ai_data
+
 
 def adjust_military_for_spy(country: Country, unit_type: str, unit_count: int):
     """스파이 계열 유닛이 늘면 군사력을 함께 증가시킨다."""
@@ -949,7 +1008,7 @@ async def get_diplomacy(
         {
             "id": d.id,
             "targetName": d.targetName,
-            "status": "중립" if d.status == "neutral" else d.status,
+            "status": normalize_diplomacy_status(d.status),
             "favorability": d.favorability
         }
         for d in relations
@@ -1199,7 +1258,7 @@ async def handle_game_turn(
     user_diplomacy = [
         {
             "targetName": d.targetName,
-            "status": "중립" if d.status == "neutral" else d.status,
+            "status": normalize_diplomacy_status(d.status),
             "favorability": d.favorability
         }
         for d in diplomacy_relations
@@ -1233,7 +1292,7 @@ async def handle_game_turn(
             all_countries_dict[other_country_original_id]["diplomacy"] = [
                 {
                     "targetName": d.targetName,
-                    "status": "중립" if d.status == "neutral" else d.status,
+                    "status": normalize_diplomacy_status(d.status),
                     "favorability": d.favorability
                 }
                 for d in other_diplomacy
@@ -1259,6 +1318,9 @@ async def handle_game_turn(
     current_stats["military_units"] = user_military
     
     ai_data = await get_gemini_game_data(user_input, current_stats, all_countries_dict)
+    
+    # AI 응답 데이터 보정 (영문 status -> 한글 변환)
+    ai_data = sanitize_ai_response_diplomacy(ai_data)
 
     # 유저 국가 DB 수치 업데이트
     changes = ai_data.get('changes', {})
@@ -1270,7 +1332,7 @@ async def handle_game_turn(
     country.last_military_change = changes.get('military', 0)
     country.last_happiness_change = changes.get('happiness', 0)
     
-    # 스탯에 변화값 적용 (군사력은 changes에서만 업데이트, add_military 액션은 유닛 테이블에만 추가)
+    # 스탯에 변화값 적용 (군사력: changes로 기존 병력 숙련도 향상, add_military 액션으로 신규 모집 추가 반영)
     country.finance += changes.get('finance', 0)
     country.population += changes.get('population', 0)
     country.military += changes.get('military', 0)
@@ -1341,6 +1403,11 @@ async def handle_game_turn(
                 inferred = changes.get('military', 0)
                 unit_count = inferred if inferred > 0 else 1
             
+            # 모병 비용 정산: 유닛 1명당 재정 50 소모
+            recruitment_cost = unit_count * 50
+            country.finance -= recruitment_cost
+            country.last_finance_change -= recruitment_cost  # 사용자에게 보여줄 변화량에 합산
+            
             stmt = select(MilitaryUnit).where(
                 (MilitaryUnit.countryID == user_specific_country_id) &  # Fix: Use user_specific_country_id
                 (MilitaryUnit.name == unit_name)
@@ -1358,16 +1425,14 @@ async def handle_game_turn(
                     unit_type=unit_type
                 )
                 session.add(new_unit)
-            # 군사력 스탯은 changes.military에서 이미 업데이트됨
-            # add_military 액션은 군사 유닛 테이블에만 추가 (군사력 스탯과 유닛 수량은 별개)
+            # 신규 병력 모집 효과: unit_count를 군사력 스탯에 추가로 반영
+            # (changes.military는 기존 병력의 숙련도 향상, unit_count는 신규 모집 효과)
+            country.military += unit_count
         
         elif action_type == 'diplomacy':
             # 외교 관계 업데이트 (우호 형성 완화)
             target_name = action.get('target')
-            status = action.get('status', '중립')
-            # neutral을 중립으로 통일
-            if status == 'neutral':
-                status = '중립'
+            status = normalize_diplomacy_status(action.get('status', '중립'))
             # 기본 우호도 변화폭을 +15로 높여 우호 형성을 쉽게 함
             favorability = action.get('favorability', 15)
             
@@ -1454,65 +1519,102 @@ async def handle_game_turn(
                     )
                 ).all()
                 
+                # 영토 부족 예외 처리: 상대방 영토보다 많이 점령하려는 경우 제한
+                available_territories = len(target_territories)
+                if land_gained > available_territories:
+                    print(f"⚠️ [전투] 영토 부족 예외: land_gained({land_gained}) > 상대 영토({available_territories}), {available_territories}개로 제한")
+                    land_gained = available_territories
+                
                 if target_territories:
-                    # AI 응답에서 지역명 추출 (scenario와 public_news에서)
-                    scenario_text = ai_data.get('scenario', '')
-                    public_news_text = ' '.join(ai_data.get('public_news', []))
-                    combined_text = f"{scenario_text} {public_news_text}"
-                    
-                    specified_province = extract_province_name_from_text(combined_text)
-                    
-                    # 디버깅: 추출된 지역명 로그
-                    print(f"🔍 [전투] 추출된 지역명: {specified_province}")
-                    print(f"🔍 [전투] 검색 텍스트: {combined_text[:300]}")
-                    print(f"🔍 [전투] 상대방 영토 목록: {[t.province_name for t in target_territories]}")
-                    
                     territories_to_conquer = []
                     
-                    if specified_province:
-                        # 특정 지역이 명시되어 있으면 해당 지역 정복
-                        specified_territory = next(
-                            (t for t in target_territories if t.province_name == specified_province),
-                            None
-                        )
-                        if specified_territory:
-                            territories_to_conquer.append(specified_territory)
-                            print(f"✅ [전투] {specified_province} 정복 성공! (소유권 변경: {target_country_id} -> {country_id})")
-                        else:
-                            print(f"⚠️ [전투] {specified_province}를 상대방 영토에서 찾을 수 없음")
+                    # AI 응답에서 target_provinces 필드 우선 사용
+                    target_provinces = action.get('target_provinces', [])
+                    
+                    if target_provinces:
+                        # target_provinces가 명시되어 있으면 해당 지역들을 정복
+                        print(f"🎯 [전투] AI 지정 점령 대상 지역: {target_provinces}")
+                        for province_name in target_provinces:
+                            matching_territory = next(
+                                (t for t in target_territories if t.province_name == province_name),
+                                None
+                            )
+                            if matching_territory:
+                                territories_to_conquer.append(matching_territory)
+                                print(f"✅ [전투] {province_name} 정복 대상 추가 (소유권 변경 예정: {target_country_id} -> {country_id})")
+                            else:
+                                print(f"⚠️ [전투] {province_name}를 상대방 영토에서 찾을 수 없음")
+                        
+                        # target_provinces 수가 land_gained보다 적으면 인접 지역에서 추가 선택
+                        if len(territories_to_conquer) < land_gained:
+                            remaining_count = land_gained - len(territories_to_conquer)
+                            remaining_targets = [t for t in target_territories if t not in territories_to_conquer]
+                            if remaining_targets:
+                                attacker_territories = list(session.exec(
+                                    select(Territory).where(
+                                        (Territory.user_id == user_id) &
+                                        (Territory.owner == country_id)
+                                    )
+                                ).all())
+                                adjacent = find_adjacent_territories(
+                                    attacker_territories,
+                                    remaining_targets,
+                                    remaining_count
+                                )
+                                territories_to_conquer.extend(adjacent)
+                                print(f"📍 [전투] 인접 지역 {len(adjacent)}개 추가 선택")
+                    else:
+                        # target_provinces가 없으면 시나리오 텍스트에서 지역명 추출 (폴백)
+                        scenario_text = ai_data.get('scenario', '')
+                        public_news_text = ' '.join(ai_data.get('public_news', []))
+                        combined_text = f"{scenario_text} {public_news_text}"
+                        
+                        specified_province = extract_province_name_from_text(combined_text)
+                        
+                        print(f"🔍 [전투] 폴백: 시나리오에서 추출된 지역명: {specified_province}")
+                        print(f"🔍 [전투] 검색 텍스트: {combined_text[:300]}")
+                        print(f"🔍 [전투] 상대방 영토 목록: {[t.province_name for t in target_territories]}")
+                        
+                        if specified_province:
+                            specified_territory = next(
+                                (t for t in target_territories if t.province_name == specified_province),
+                                None
+                            )
+                            if specified_territory:
+                                territories_to_conquer.append(specified_territory)
+                                print(f"✅ [전투] {specified_province} 정복 성공!")
+                            
                             # 추가로 필요한 영토는 인접 지역에서 선택
-                            if land_gained > 1:
-                                remaining_count = land_gained - 1
-                                remaining_targets = [t for t in target_territories if t != specified_territory]
+                            if len(territories_to_conquer) < land_gained:
+                                remaining_count = land_gained - len(territories_to_conquer)
+                                remaining_targets = [t for t in target_territories if t not in territories_to_conquer]
                                 if remaining_targets:
-                                    # 공격자의 영토 가져오기
                                     attacker_territories = list(session.exec(
                                         select(Territory).where(
                                             (Territory.user_id == user_id) &
                                             (Territory.owner == country_id)
                                         )
                                     ).all())
-                                    
                                     adjacent = find_adjacent_territories(
                                         attacker_territories,
                                         remaining_targets,
                                         remaining_count
                                     )
                                     territories_to_conquer.extend(adjacent)
-                    else:
-                        # 특정 지역이 명시되지 않았으면 인접한 지역 선택
-                        attacker_territories = list(session.exec(
-                            select(Territory).where(
-                                (Territory.user_id == user_id) &
-                                (Territory.owner == country_id)
+                        else:
+                            # 특정 지역이 명시되지 않았으면 인접한 지역 선택
+                            attacker_territories = list(session.exec(
+                                select(Territory).where(
+                                    (Territory.user_id == user_id) &
+                                    (Territory.owner == country_id)
+                                )
+                            ).all())
+                            
+                            territories_to_conquer = find_adjacent_territories(
+                                attacker_territories,
+                                list(target_territories),
+                                land_gained
                             )
-                        ).all())
-                        
-                        territories_to_conquer = find_adjacent_territories(
-                            attacker_territories,
-                            list(target_territories),
-                            land_gained
-                        )
                     
                     # 공격자 국가 ID (현재 국가)
                     attacker_country_id = country_id  # 원래 country_id (goguryeo, baekje, silla)
@@ -1581,6 +1683,9 @@ async def handle_game_turn(
     ) if ai_targets else []
 
     for (other_country_db, _), ai_turn_data in zip(ai_targets, ai_results):
+        # AI 응답 데이터 보정 (영문 status -> 한글 변환)
+        ai_turn_data = sanitize_ai_response_diplomacy(ai_turn_data)
+        
         # 스탯 업데이트
         other_changes = ai_turn_data.get('changes', {})
         
@@ -1600,7 +1705,7 @@ async def handle_game_turn(
         other_country_db.last_military_change = other_changes.get('military', 0)
         other_country_db.last_happiness_change = other_changes.get('happiness', 0)
         
-        # 스탯에 변화값 적용 (군사력은 changes에서만 업데이트)
+        # 스탯에 변화값 적용 (군사력: changes로 기존 병력 숙련도 향상, add_military 액션으로 신규 모집 추가 반영)
         other_country_db.finance += other_changes.get('finance', 0)
         other_country_db.population += other_changes.get('population', 0)
         other_country_db.military += other_changes.get('military', 0)
@@ -1650,6 +1755,11 @@ async def handle_game_turn(
                     inferred = other_changes.get('military', 0)
                     unit_count = inferred if inferred > 0 else 1
                 
+                # 모병 비용 정산: 유닛 1명당 재정 50 소모
+                recruitment_cost = unit_count * 50
+                other_country_db.finance -= recruitment_cost
+                other_country_db.last_finance_change -= recruitment_cost  # 변화량에 합산
+                
                 stmt = select(MilitaryUnit).where(
                     (MilitaryUnit.countryID == other_country_db.id) & 
                     (MilitaryUnit.name == unit_name)
@@ -1667,14 +1777,13 @@ async def handle_game_turn(
                         unit_type=unit_type
                     )
                     session.add(new_unit)
-                # 군사력 스탯은 changes.military에서 이미 업데이트됨
+                # 신규 병력 모집 효과: unit_count를 군사력 스탯에 추가로 반영
+                # (changes.military는 기존 병력의 숙련도 향상, unit_count는 신규 모집 효과)
+                other_country_db.military += unit_count
             
             elif action_type == 'diplomacy':
                 target_name = action.get('target')
-                status = action.get('status', '중립')
-                # neutral을 중립으로 통일
-                if status == 'neutral':
-                    status = '중립'
+                status = normalize_diplomacy_status(action.get('status', '중립'))
                 # AI도 기본 우호도 변화폭을 +15로 높여 관계 형성을 쉽게 함
                 favorability = action.get('favorability', 15)
                 
@@ -1738,61 +1847,100 @@ async def handle_game_turn(
                         )
                     ).all()
                     
+                    # 영토 부족 예외 처리: 상대방 영토보다 많이 점령하려는 경우 제한
+                    available_territories = len(target_territories)
+                    if land_gained > available_territories:
+                        print(f"⚠️ [AI 전투] 영토 부족 예외: land_gained({land_gained}) > 상대 영토({available_territories}), {available_territories}개로 제한")
+                        land_gained = available_territories
+                    
                     if target_territories:
-                        # AI 응답에서 지역명 추출 (scenario와 public_news에서)
-                        scenario_text = ai_turn_data.get('scenario', '')
-                        public_news_text = ' '.join(ai_turn_data.get('public_news', []))
-                        combined_text = f"{scenario_text} {public_news_text}"
-                        
-                        specified_province = extract_province_name_from_text(combined_text)
-                        
                         territories_to_conquer = []
                         
-                        if specified_province:
-                            # 특정 지역이 명시되어 있으면 해당 지역 정복
-                            specified_territory = next(
-                                (t for t in target_territories if t.province_name == specified_province),
-                                None
-                            )
-                            if specified_territory:
-                                territories_to_conquer.append(specified_territory)
-                                # 추가로 필요한 영토는 인접 지역에서 선택
-                                if land_gained > 1:
-                                    remaining_count = land_gained - 1
-                                    remaining_targets = [t for t in target_territories if t != specified_territory]
-                                    if remaining_targets:
-                                        # AI 국가의 영토 가져오기
-                                        ai_territories = list(session.exec(
-                                            select(Territory).where(
-                                                (Territory.user_id == user_id) &
-                                                (Territory.owner == other_country_original_id)
-                                            )
-                                        ).all())
-                                        
-                                        adjacent = find_adjacent_territories(
-                                            ai_territories,
-                                            list(remaining_targets),
-                                            remaining_count
-                                        )
-                                        territories_to_conquer.extend(adjacent)
-                        else:
-                            # 특정 지역이 명시되지 않았으면 인접한 지역 선택
-                            ai_territories = list(session.exec(
-                                select(Territory).where(
-                                    (Territory.user_id == user_id) &
-                                    (Territory.owner == other_country_original_id)
+                        # AI 응답에서 target_provinces 필드 우선 사용
+                        target_provinces = action.get('target_provinces', [])
+                        
+                        if target_provinces:
+                            # target_provinces가 명시되어 있으면 해당 지역들을 정복
+                            print(f"🎯 [AI 전투] {other_country_db.name} 지정 점령 대상: {target_provinces}")
+                            for province_name in target_provinces:
+                                matching_territory = next(
+                                    (t for t in target_territories if t.province_name == province_name),
+                                    None
                                 )
-                            ).all())
+                                if matching_territory:
+                                    territories_to_conquer.append(matching_territory)
+                                    print(f"✅ [AI 전투] {province_name} 정복 대상 추가")
+                                else:
+                                    print(f"⚠️ [AI 전투] {province_name}를 상대방 영토에서 찾을 수 없음")
                             
-                            territories_to_conquer = find_adjacent_territories(
-                                ai_territories,
-                                list(target_territories),
-                                land_gained
-                            )
+                            # target_provinces 수가 land_gained보다 적으면 인접 지역에서 추가 선택
+                            if len(territories_to_conquer) < land_gained:
+                                remaining_count = land_gained - len(territories_to_conquer)
+                                remaining_targets = [t for t in target_territories if t not in territories_to_conquer]
+                                if remaining_targets:
+                                    ai_territories = list(session.exec(
+                                        select(Territory).where(
+                                            (Territory.user_id == user_id) &
+                                            (Territory.owner == other_country_original_id)
+                                        )
+                                    ).all())
+                                    adjacent = find_adjacent_territories(
+                                        ai_territories,
+                                        remaining_targets,
+                                        remaining_count
+                                    )
+                                    territories_to_conquer.extend(adjacent)
+                        else:
+                            # target_provinces가 없으면 시나리오에서 지역명 추출 (폴백)
+                            scenario_text = ai_turn_data.get('scenario', '')
+                            public_news_text = ' '.join(ai_turn_data.get('public_news', []))
+                            combined_text = f"{scenario_text} {public_news_text}"
+                            
+                            specified_province = extract_province_name_from_text(combined_text)
+                            
+                            if specified_province:
+                                specified_territory = next(
+                                    (t for t in target_territories if t.province_name == specified_province),
+                                    None
+                                )
+                                if specified_territory:
+                                    territories_to_conquer.append(specified_territory)
+                                    # 추가로 필요한 영토는 인접 지역에서 선택
+                                    if len(territories_to_conquer) < land_gained:
+                                        remaining_count = land_gained - len(territories_to_conquer)
+                                        remaining_targets = [t for t in target_territories if t not in territories_to_conquer]
+                                        if remaining_targets:
+                                            ai_territories = list(session.exec(
+                                                select(Territory).where(
+                                                    (Territory.user_id == user_id) &
+                                                    (Territory.owner == other_country_original_id)
+                                                )
+                                            ).all())
+                                            adjacent = find_adjacent_territories(
+                                                ai_territories,
+                                                list(remaining_targets),
+                                                remaining_count
+                                            )
+                                            territories_to_conquer.extend(adjacent)
+                            else:
+                                # 특정 지역이 명시되지 않았으면 인접한 지역 선택
+                                ai_territories = list(session.exec(
+                                    select(Territory).where(
+                                        (Territory.user_id == user_id) &
+                                        (Territory.owner == other_country_original_id)
+                                    )
+                                ).all())
+                                
+                                territories_to_conquer = find_adjacent_territories(
+                                    ai_territories,
+                                    list(target_territories),
+                                    land_gained
+                                )
                         
                         # 영토 소유권 변경
                         for territory in territories_to_conquer:
                             territory.owner = other_country_original_id
+                            print(f"🗺️ [AI 영토 변경] {territory.province_name}: {target_country_id} -> {other_country_original_id}")
                             session.add(territory)
                 
                 elif outcome == "패배" and land_lost > 0:
@@ -1862,16 +2010,64 @@ async def handle_game_turn(
             "color": other_country_db.color,
         }
     
+    # 국가 멸망(영토 소진) 체크 로직
+    fallen_countries = []
+    country_names = {
+        "goguryeo": "고구려",
+        "baekje": "백제",
+        "silla": "신라"
+    }
+    
+    for check_country in all_countries_db:
+        check_country_original_id = check_country.id.rsplit("_", 1)[0] if "_" in check_country.id else check_country.id
+        
+        # 해당 국가의 영토 수 확인
+        territory_count = session.exec(
+            select(Territory).where(
+                (Territory.user_id == user_id) &
+                (Territory.owner == check_country_original_id)
+            )
+        ).all()
+        
+        if len(territory_count) == 0 and check_country.is_active:
+            # 영토가 0이면 국가 멸망 처리
+            check_country.is_active = False
+            session.add(check_country)
+            
+            country_display_name = country_names.get(check_country_original_id, check_country.name)
+            fallen_countries.append(country_display_name)
+            print(f"💀 [멸망] {country_display_name}의 영토가 모두 소진되어 역사 속으로 사라졌습니다.")
+            
+            # 멸망 뉴스 생성
+            fall_news = NewsItem(
+                countryID=check_country.id,
+                title="국가 멸망",
+                content=f"{country_display_name}이(가) 모든 영토를 잃고 역사 속으로 사라졌습니다.",
+                type="public_only",
+                is_public=True
+            )
+            session.add(fall_news)
+    
     session.commit()
     session.refresh(country)
 
+    # 멸망한 국가가 있으면 시나리오에 메시지 추가
+    scenario_text = ai_data.get('scenario', '')
+    if fallen_countries:
+        fall_message = "\n\n⚔️ **역사적 순간** ⚔️\n" + "\n".join([
+            f"🏴 {name}이(가) 역사 속으로 사라졌습니다..."
+            for name in fallen_countries
+        ])
+        scenario_text = scenario_text + fall_message
+    
     return {
-        "scenario": ai_data.get('scenario', ''),
+        "scenario": scenario_text,
         "mood": ai_data.get('mood', 'neutral'),
         "public_news": ai_data.get('public_news', []),
         "public_news_items": public_news_items,
         "secret_news": ai_data.get('secret_news', []),
         "spy_leak_info": spy_leak_info,
+        "fallen_countries": fallen_countries,  # 멸망한 국가 목록 추가
         "updated_stats": {
             "finance": country.finance,
             "population": country.population,
@@ -1919,9 +2115,8 @@ async def update_diplomacy(
         if not country:
             raise HTTPException(status_code=404, detail="국가를 찾을 수 없습니다.")
         
-        # neutral을 중립으로 통일
-        if status == 'neutral':
-            status = '중립'
+        # 영문 status를 한글로 정규화
+        status = normalize_diplomacy_status(status)
         
         # 기존 외교 관계 찾기
         statement = select(Diplomacy).where(
@@ -1948,7 +2143,7 @@ async def update_diplomacy(
         return {
             "id": diplomacy.id,
             "targetName": diplomacy.targetName,
-            "status": "중립" if diplomacy.status == "neutral" else diplomacy.status,
+            "status": normalize_diplomacy_status(diplomacy.status),
             "favorability": diplomacy.favorability
         }
     except HTTPException:

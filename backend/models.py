@@ -15,6 +15,7 @@ class Country(SQLModel, table=True):
     turn: int = 1
     title: str = ""
     color: str = ""
+    is_active: bool = True  # 국가 활성 상태 (False면 멸망)
     
     # 지난 턴의 상태 변화값 저장 (AI 턴 처리 후 반영)
     last_finance_change: int = 0

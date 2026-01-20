@@ -228,14 +228,17 @@ async def get_gemini_game_data(user_input: str, current_stats: dict, all_countri
    - **유저가 원하는 대로 게임이 진행되도록 적극적으로 도와주세요**
 
 액션 형식:
-- war: {{"type": "war", "target": "적국명", "outcome": "승리/패배", "land_gained": 3~10, "land_lost": 3~10, "casualties": 100~500}}
+- war: {{"type": "war", "target": "적국명", "outcome": "승리/패배", "land_gained": 3~10, "land_lost": 3~10, "casualties": 100~500, "target_provinces": ["지역명1", "지역명2"]}}
   * outcome에 따라 수치 자동 반영. 승리 시 land_gained, 패배 시 land_lost
   * 전면전이므로 반드시 큰 규모로 처리
+  * **중요: target_provinces에는 점령하려는 적국의 실제 지역명을 반드시 포함해야 함!**
+  * 유효한 지역명: 자강도, 함경북도, 함경남도, 황해북도, 황해남도, 개성특별시, 강원특별자치도, 평안북도, 평안남도, 평양직할시, 량강도, 신의주시, 남포특별시, 라선특별시, 서울특별시, 인천광역시, 경기도, 충청북도, 충청남도, 세종특별자치시, 대전광역시, 전라북도, 전북특별자치도, 전라남도, 광주광역시, 제주특별자치도, 경상북도, 경상남도, 대구광역시, 울산광역시, 부산광역시
+  * 시나리오에서 언급한 지역과 target_provinces가 일치해야 지도에 반영됨
 - add_military: {{"type": "add_military", "name": "군대명", "count": 수량, "icon": "아이콘", "unit_type": "regular/spy"}}
   * 반드시 생성하면 finance에서 비용 공제 필수
   * name은 구체적으로: "철기병", "궁병", "첩자", "생화학무기", "암살단" 등
-   - diplomacy: {{"type": "diplomacy", "target": "국가명", "status": "동맹/중립/적대", "favorability": -20~50}}
-     * status는 반드시 한글로: "동맹", "중립", "적대" (영문 "neutral" 사용 금지)
+- diplomacy: {{"type": "diplomacy", "target": "국가명", "status": "동맹/중립/적대", "favorability": -20~50}}
+  * status는 반드시 한글로: "동맹", "중립", "적대" (영문 "neutral" 사용 금지)
   * 70% 확률로 성공, 30% 확률로 실패 (유저에게 유리)
 - secret_operation: {{"type": "secret_operation", "title": "작전명", "content": "내용", "operation_type": "암살/스파이/선동", "target_country": "목표국가"}}
 
@@ -252,7 +255,7 @@ async def get_gemini_game_data(user_input: str, current_stats: dict, all_countri
     "changes": {{"finance": -50, "population": 100, "military": 3, "happiness": 5}},
     "actions": [
         {{"type": "add_military", "name": "철기병", "count": 50, "icon": "🐎", "unit_type": "regular"}},
-        {{"type": "war", "target": "고구려", "outcome": "승리", "land_gained": 5, "land_lost": 0, "casualties": 200}}
+        {{"type": "war", "target": "고구려", "outcome": "승리", "land_gained": 5, "land_lost": 0, "casualties": 200, "target_provinces": ["황해북도", "개성특별시"]}}
     ]
 }}
 
@@ -265,6 +268,11 @@ async def get_gemini_game_data(user_input: str, current_stats: dict, all_countri
 - 유저의 명령이 명확하면 반드시 해당 액션을 생성하세요
 
 **[절대 규칙] 반드시 위의 JSON 형식으로만 응답하세요. 설명, 마크다운, 추가 텍스트 없이 오직 JSON 객체 하나만 출력하세요.**
+
+**[매우 중요 - 언어 규칙]**
+- diplomacy 액션의 status 필드는 **절대로 영문(neutral, alliance, hostile 등)을 사용하지 마세요!**
+- status는 **반드시 한글**로만 응답하세요: "동맹", "중립", "적대" 중 하나
+- 영문 status 사용 시 게임 시스템 오류가 발생합니다. 반드시 한글만 사용하세요!
         """
         
         # 텍스트 생성 요청
@@ -386,11 +394,12 @@ async def get_ai_country_turn(country_stats: dict, all_countries: dict) -> dict:
 
 4. 액션 선택 (균형있게):
    - add_military: **매우 드물게만 생성 (10~15% 확률, 3~4턴에 한 번 정도)**, **유닛명을 구체적으로 (철기병, 궁병, 첩자 등), 수량은 10~25명 정도로 매우 제한적**
-   - war: **정당한 이유가 있을 때만 전쟁 시작. outcome은 50% 확률로 승리/패배. land_gained/land_lost는 1~5 영토 (플레이어와 유사한 규모)**
+   - war: **정당한 이유가 있을 때만 전쟁 시작. outcome은 50% 확률로 승리/패배. land_gained/land_lost는 1~5 영토 (플레이어와 유사한 규모). target_provinces에 점령 대상 지역명 명시 필수!**
    - diplomacy: **50% 확률로 성공(favorability +20~30) 또는 실패(favorability -10~15), status는 반드시 한글 "동맹", "중립", "적대" 사용**
    - secret_operation: 가끔 사용 (10% 확률)
    - **액션은 선택적입니다. 매 턴마다 액션이 필요하지 않습니다. 내정에 집중하는 턴도 정상적입니다.**
    - **군사 증강은 매우 드물게만 하세요. 대부분의 턴은 내정이나 외교에 집중하세요.**
+   - **war 액션 시 target_provinces 필수!** 유효한 지역명: 자강도, 함경북도, 함경남도, 황해북도, 황해남도, 개성특별시, 강원특별자치도, 평안북도, 평안남도, 평양직할시, 량강도, 신의주시, 남포특별시, 라선특별시, 서울특별시, 인천광역시, 경기도, 충청북도, 충청남도, 세종특별자치시, 대전광역시, 전라북도, 전북특별자치도, 전라남도, 광주광역시, 제주특별자치도, 경상북도, 경상남도, 대구광역시, 울산광역시, 부산광역시
 
 5. **균형잡힌 게임 진행 (중요!)**:
    - 플레이어 국가의 진행 속도와 유사한 수준을 유지하세요
@@ -415,14 +424,20 @@ async def get_ai_country_turn(country_stats: dict, all_countries: dict) -> dict:
     "changes": {{"finance": 30, "population": 25, "military": 0, "happiness": 2}},
     "actions": [
         {{"type": "add_military", "name": "철기병", "count": 15, "icon": "🐎", "unit_type": "regular"}},
-        {{"type": "war", "target": "약한_국가명", "outcome": "승리", "land_gained": 3, "land_lost": 0, "casualties": 100}},
+        {{"type": "war", "target": "약한_국가명", "outcome": "승리", "land_gained": 3, "land_lost": 0, "casualties": 100, "target_provinces": ["경기도", "인천광역시"]}},
         {{"type": "diplomacy", "target": "국가명", "status": "동맹", "favorability": 25}}
      * status는 반드시 한글 "동맹", "중립", "적대" 중 하나 사용
      * add_military는 매우 드물게만 포함 (대부분의 턴에는 actions가 비어있거나 다른 액션만 포함)
+     * war 액션의 target_provinces는 점령할 실제 지역명 리스트 (시나리오와 일치해야 함)
     ]
 }}
 
 **[절대 규칙] 반드시 위의 JSON 형식으로만 응답하세요. 설명, 마크다운, 추가 텍스트 없이 오직 JSON 객체 하나만 출력하세요.**
+
+**[매우 중요 - 언어 규칙]**
+- diplomacy 액션의 status 필드는 **절대로 영문(neutral, alliance, hostile 등)을 사용하지 마세요!**
+- status는 **반드시 한글**로만 응답하세요: "동맹", "중립", "적대" 중 하나
+- 영문 status 사용 시 게임 시스템 오류가 발생합니다. 반드시 한글만 사용하세요!
         """
         
         # 텍스트 생성 요청

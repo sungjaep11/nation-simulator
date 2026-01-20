@@ -49,6 +49,9 @@ def migrate_add_last_change_columns():
         if "last_happiness_change" not in columns:
             cursor.execute("ALTER TABLE country ADD COLUMN last_happiness_change INTEGER DEFAULT 0")
         
+        if "is_active" not in columns:
+            cursor.execute("ALTER TABLE country ADD COLUMN is_active INTEGER DEFAULT 1")
+        
         conn.commit()
     except Exception as e:
         conn.rollback()
