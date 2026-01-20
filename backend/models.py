@@ -27,16 +27,14 @@ class Country(SQLModel, table=True):
         
         재정, 인구, 군사력, 행복도를 종합하여 점수를 산출합니다.
         - 재정: 100당 1점
-        - 인구: 1000당 1점
-        - 군사력: 1당 100점
+        - 인구: 100당 1점
+        - 군사력: 1당 50점
         - 행복도: 1당 10점
-        
-        Fix: Updated to match README.md formula
         """
         score = (
             (self.finance // 100) +
-            (self.population // 1000) +  # Fix: Changed from // 100 to // 1000 to match README
-            (self.military * 100) +  # Fix: Changed from * 50 to * 100 to match README
+            (self.population // 100) +
+            (self.military * 50) +
             (self.happiness * 10)
         )
         return score

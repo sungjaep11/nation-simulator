@@ -1591,8 +1591,8 @@ async def add_military_unit(
             )
             session.add(unit)
         
-        # 스파이 계열이면 군사력 증가
-        adjust_military_for_spy(country, unit.unit_type, count)
+        # 모든 유닛 추가 시 군사력 증가 (handle_game_turn과 일관성 유지)
+        country.military += count
         country.update_total_score()
         
         session.commit()

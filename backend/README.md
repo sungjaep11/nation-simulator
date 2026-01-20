@@ -81,15 +81,15 @@ AI 응답:
 ## TotalScore 계산 공식
 
 ```python
-totalScore = (finance / 100) + (population / 1000) + (military * 100) + (happiness * 10)
+totalScore = (finance / 100) + (population / 100) + (military * 50) + (happiness * 10)
 ```
 
 **예시 (고구려 초기값)**:
-- 재정 15,000 → 150점
-- 인구 80,000 → 80점
-- 군사력 15 → 1,500점
+- 재정 14,000 → 140점
+- 인구 51,000 → 510점
+- 군사력 17 → 850점
 - 행복도 50 → 500점
-- **총점: 2,230점**
+- **총점: 2,000점**
 
 ## 실행 방법
 

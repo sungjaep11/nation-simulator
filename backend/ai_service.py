@@ -185,7 +185,7 @@ async def get_gemini_game_data(user_input: str, current_stats: dict, all_countri
   * name은 구체적으로: "철기병", "궁병", "첩자", "생화학무기", "암살단" 등
    - diplomacy: {{"type": "diplomacy", "target": "국가명", "status": "동맹/중립/적대", "favorability": -20~50}}
      * status는 반드시 한글로: "동맹", "중립", "적대" (영문 "neutral" 사용 금지)
-  * 50% 확률로 성공/실패
+  * 70% 확률로 성공, 30% 확률로 실패 (유저에게 유리)
 - secret_operation: {{"type": "secret_operation", "title": "작전명", "content": "내용", "operation_type": "암살/스파이/선동", "target_country": "목표국가"}}
 
 응답 형식 (JSON만):
