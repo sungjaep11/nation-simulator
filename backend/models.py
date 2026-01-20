@@ -15,6 +15,12 @@ class Country(SQLModel, table=True):
     title: str = ""
     color: str = ""
     
+    # 지난 턴의 상태 변화값 저장 (AI 턴 처리 후 반영)
+    last_finance_change: int = 0
+    last_population_change: int = 0
+    last_military_change: int = 0
+    last_happiness_change: int = 0
+    
     def calculate_total_score(self) -> int:
         """국가의 종합 점수 계산
         

@@ -136,7 +136,11 @@ async def get_country(country_id: str, session: Session = Depends(get_session)):
         "totalScore": country.totalScore,
         "turn": country.turn,
         "title": country.title,
-        "color": country.color
+        "color": country.color,
+        "lastFinanceChange": country.last_finance_change,
+        "lastPopulationChange": country.last_population_change,
+        "lastMilitaryChange": country.last_military_change,
+        "lastHappinessChange": country.last_happiness_change
     }
 
 @app.get("/api/countries")
@@ -154,7 +158,11 @@ async def get_all_countries(session: Session = Depends(get_session)):
             "totalScore": c.totalScore,
             "turn": c.turn,
             "title": c.title,
-            "color": c.color
+            "color": c.color,
+            "lastFinanceChange": c.last_finance_change,
+            "lastPopulationChange": c.last_population_change,
+            "lastMilitaryChange": c.last_military_change,
+            "lastHappinessChange": c.last_happiness_change
         }
         for c in countries
     ]
@@ -386,10 +394,28 @@ async def handle_game_turn(
 
     # 유저 국가 DB 수치 업데이트
     changes = ai_data.get('changes', {})
+    actions = ai_data.get('actions', [])
+
+    # 군사 관련 액션이 없으면 군사력 변화는 0으로 강제 (임의 증가 방지)
+    has_military_action = any(a.get('type') in ['add_military', 'war'] for a in actions)
+    if not has_military_action and 'military' in changes:
+        changes['military'] = 0
+    
+    # DB에 변화값 저장
+    country.last_finance_change = changes.get('finance', 0)
+    country.last_population_change = changes.get('population', 0)
+    country.last_military_change = changes.get('military', 0)
+    country.last_happiness_change = changes.get('happiness', 0)
+    
+    # 스탯에 변화값 적용
     country.finance += changes.get('finance', 0)
     country.population += changes.get('population', 0)
     country.military += changes.get('military', 0)
     country.happiness += changes.get('happiness', 0)
+    
+    # 행복도 100% 제한
+    country.happiness = min(100, max(0, country.happiness))
+    
     country.turn += 1
     
     # totalScore 자동 계산
@@ -445,6 +471,11 @@ async def handle_game_turn(
             unit_count = action.get('count', 0)
             unit_icon = action.get('icon', '⚔️')
             unit_type = action.get('unit_type', 'regular')  # regular, spy, assassin 등
+
+            # 첩자/스파이 추가 시 count가 0으로 올 수 있어 보정
+            if unit_count <= 0:
+                inferred = changes.get('military', 0)
+                unit_count = inferred if inferred > 0 else 1
             
             stmt = select(MilitaryUnit).where(
                 (MilitaryUnit.countryID == country_id) & 
@@ -463,13 +494,15 @@ async def handle_game_turn(
                     unit_type=unit_type
                 )
                 session.add(new_unit)
-            adjust_military_for_spy(country, unit_type, unit_count)
+            # 군사력은 모집한 병력 수만큼 증가 (정규/스파이 구분 없이 반영)
+            country.military += unit_count
         
         elif action_type == 'diplomacy':
-            # 외교 관계 업데이트
+            # 외교 관계 업데이트 (우호 형성 완화)
             target_name = action.get('target')
             status = action.get('status', '중립')
-            favorability = action.get('favorability', 0)
+            # 기본 우호도 변화폭을 +15로 높여 우호 형성을 쉽게 함
+            favorability = action.get('favorability', 15)
             
             stmt = select(Diplomacy).where(
                 (Diplomacy.sourceID == country_id) & 
@@ -479,13 +512,13 @@ async def handle_game_turn(
             
             if existing_diplomacy:
                 existing_diplomacy.status = status
-                existing_diplomacy.favorability += favorability
+                existing_diplomacy.favorability = max(-100, min(100, existing_diplomacy.favorability + favorability))
             else:
                 new_diplomacy = Diplomacy(
                     sourceID=country_id,
                     targetName=target_name,
                     status=status,
-                    favorability=favorability
+                    favorability=max(-100, min(100, favorability))
                 )
                 session.add(new_diplomacy)
         
@@ -505,6 +538,31 @@ async def handle_game_turn(
             )
             secret_intel.set_shared_countries(shared_with)
             session.add(secret_intel)
+        
+        elif action_type == 'war':
+            # 전쟁 처리 (추가 로직은 나중에)
+            target_country_name = action.get('target', '')
+            outcome = action.get('outcome', 'draw')
+            land_gained = action.get('land_gained', 0)
+            land_lost = action.get('land_lost', 0)
+            casualties = action.get('casualties', 0)
+            
+            # 전쟁 뉴스 저장
+            war_news = f"{current_stats.get('name', '')}와 {target_country_name}의 전쟁 발발! 결과: {outcome}"
+            news_item = NewsItem(
+                countryID=country_id,
+                title="전쟁",
+                content=war_news,
+                type="war",
+                is_public=True
+            )
+            session.add(news_item)
+            
+            # 전쟁으로 인한 추가 수치 조정 (선택사항)
+            if outcome == "승리":
+                country.military -= int(casualties * 0.3)  # 피해
+            elif outcome == "패배":
+                country.military -= int(casualties * 0.8)  # 큰 피해
     
     session.add(country)
     session.commit()
@@ -526,19 +584,32 @@ async def handle_game_turn(
     for (other_country_db, _), ai_turn_data in zip(ai_targets, ai_results):
         # 스탯 업데이트
         other_changes = ai_turn_data.get('changes', {})
-        if not any(other_changes.values()):
-            # 기본 증가값: 재정/인구/군사/행복에 소폭 변화 부여 (정체 방지)
+        
+        # changes가 없거나 모두 0이면 더 작은 기본값으로 완만하게 변화
+        if not other_changes or all(v == 0 for v in other_changes.values()):
             other_changes = {
-                "finance": max(100, other_country_db.population // 200),
-                "population": max(0, other_country_db.population // 5000),
-                "military": max(1, other_country_db.military // 8 or 1),
-                "happiness": 1,
+                "finance": 10,
+                "population": 2,
+                "military": 0,
+                "happiness": 0,
             }
             ai_turn_data['changes'] = other_changes
+        
+        # DB에 변화값 저장
+        other_country_db.last_finance_change = other_changes.get('finance', 0)
+        other_country_db.last_population_change = other_changes.get('population', 0)
+        other_country_db.last_military_change = other_changes.get('military', 0)
+        other_country_db.last_happiness_change = other_changes.get('happiness', 0)
+        
+        # 스탯에 변화값 적용
         other_country_db.finance += other_changes.get('finance', 0)
         other_country_db.population += other_changes.get('population', 0)
         other_country_db.military += other_changes.get('military', 0)
         other_country_db.happiness += other_changes.get('happiness', 0)
+        
+        # 행복도 100% 제한
+        other_country_db.happiness = min(100, max(0, other_country_db.happiness))
+        
         other_country_db.turn += 1
         other_country_db.update_total_score()
         
@@ -574,6 +645,10 @@ async def handle_game_turn(
                 unit_count = action.get('count', 0)
                 unit_icon = action.get('icon', '⚔️')
                 unit_type = action.get('unit_type', 'regular')
+
+                if unit_count <= 0:
+                    inferred = other_changes.get('military', 0)
+                    unit_count = inferred if inferred > 0 else 1
                 
                 stmt = select(MilitaryUnit).where(
                     (MilitaryUnit.countryID == other_country_db.id) & 
@@ -592,12 +667,13 @@ async def handle_game_turn(
                         unit_type=unit_type
                     )
                     session.add(new_unit)
-                adjust_military_for_spy(other_country_db, unit_type, unit_count)
+                other_country_db.military += unit_count
             
             elif action_type == 'diplomacy':
                 target_name = action.get('target')
                 status = action.get('status', '중립')
-                favorability = action.get('favorability', 0)
+                # AI도 기본 우호도 변화폭을 +15로 높여 관계 형성을 쉽게 함
+                favorability = action.get('favorability', 15)
                 
                 stmt = select(Diplomacy).where(
                     (Diplomacy.sourceID == other_country_db.id) & 
@@ -607,13 +683,13 @@ async def handle_game_turn(
                 
                 if existing_diplomacy:
                     existing_diplomacy.status = status
-                    existing_diplomacy.favorability += favorability
+                    existing_diplomacy.favorability = max(-100, min(100, existing_diplomacy.favorability + favorability))
                 else:
                     new_diplomacy = Diplomacy(
                         sourceID=other_country_db.id,
                         targetName=target_name,
                         status=status,
-                        favorability=favorability
+                        favorability=max(-100, min(100, favorability))
                     )
                     session.add(new_diplomacy)
             
@@ -664,6 +740,10 @@ async def handle_game_turn(
             "population": country.population,
             "happiness": country.happiness,
             "military": country.military,
+            "lastFinanceChange": country.last_finance_change,
+            "lastPopulationChange": country.last_population_change,
+            "lastMilitaryChange": country.last_military_change,
+            "lastHappinessChange": country.last_happiness_change,
             "turn": country.turn,
             "totalScore": country.totalScore,
             "color": country.color,
