@@ -20,6 +20,13 @@ interface GameStats {
   military: number;
 }
 
+interface LastChanges {
+  finance: number;
+  population: number;
+  happiness: number;
+  military: number;
+}
+
 interface NationStats {
   goguryeo: GameStats;
   baekje: GameStats;
@@ -212,6 +219,7 @@ function StatItem({
   label,
   value,
   prevValue,
+  change,
   showArrow = false,
   prefix = "",
   suffix = "",
@@ -225,6 +233,7 @@ function StatItem({
   label: string;
   value: number;
   prevValue?: number;
+  change?: number;
   showArrow?: boolean;
   prefix?: string;
   suffix?: string;
@@ -286,6 +295,15 @@ function StatItem({
           <span className="font-bold text-[#F5F5DC] font-serif">
             <RollingNumber value={value} prefix={prefix} suffix={suffix} />
           </span>
+          {typeof change === "number" && change !== 0 && (
+            <span
+              className={`text-[10px] font-bold px-1 rounded-sm ml-1 ${
+                change > 0 ? "text-green-400" : "text-red-400"
+              }`}
+            >
+              {change > 0 ? "+" : ""}{change.toLocaleString()}
+            </span>
+          )}
           {shouldShowArrow && (
             <span 
               className={`text-xs font-bold transition-all duration-300 ${
@@ -631,28 +649,13 @@ export default function Home() {
     happiness: 50,
     military: 12,
   });
+  const [lastChanges, setLastChanges] = useState<LastChanges>({
+    finance: 0,
+    population: 0,
+    happiness: 0,
+    military: 0,
+  });
 
-  // 각 나라별 기본 stats (현재는 선택된 나라만 업데이트되고, 나머지는 기본값 사용)
-  const allNationStats: NationStats = {
-    goguryeo: selectedNation === "goguryeo" ? stats : {
-      finance: 15000,
-      population: 80000,
-      happiness: 50,
-      military: 15,
-    },
-    baekje: selectedNation === "baekje" ? stats : {
-      finance: 18000,
-      population: 60000,
-      happiness: 50,
-      military: 10,
-    },
-    silla: selectedNation === "silla" ? stats : {
-      finance: 12000,
-      population: 45000,
-      happiness: 50,
-      military: 12,
-    },
-  };
   const [commandInput, setCommandInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [commandLogs, setCommandLogs] = useState<CommandLog[]>([]);
@@ -698,6 +701,11 @@ export default function Home() {
     baekje?: number;
     silla?: number;
   }>({});
+  const [allNationStats, setAllNationStats] = useState<NationStats>({
+    goguryeo: { finance: 15000, population: 80000, happiness: 50, military: 15 },
+    baekje: { finance: 18000, population: 60000, happiness: 50, military: 10 },
+    silla: { finance: 12000, population: 45000, happiness: 50, military: 12 },
+  });
   const [currentTotalScore, setCurrentTotalScore] = useState<number>(0);
   const [currentMood, setCurrentMood] = useState<"happy" | "neutral" | "angry" | "depressed">("neutral");
   const [news, setNews] = useState<NewsItem[]>([
@@ -884,12 +892,21 @@ export default function Home() {
           setCurrentMood(data.mood as "happy" | "neutral" | "angry" | "depressed");
         }
         
-        return {
+        const updatedStats = {
           finance: newStats.finance,
           population: newStats.population,
           happiness: newStats.happiness,
           military: newStats.military,
         };
+        // 백엔드에서 전달된 변화값 저장 (없으면 차이값으로 대체)
+        setLastChanges({
+          finance: newStats.lastFinanceChange ?? financeDiff ?? 0,
+          population: newStats.lastPopulationChange ?? (newStats.population - prev.population) ?? 0,
+          happiness: newStats.lastHappinessChange ?? (newStats.happiness - prev.happiness) ?? 0,
+          military: newStats.lastMilitaryChange ?? (newStats.military - prev.military) ?? 0,
+        });
+        
+        return updatedStats;
       });
 
       // 턴 업데이트
@@ -899,25 +916,43 @@ export default function Home() {
         setTurn((prev) => prev + 1);
       }
       
-      // 모든 국가의 점수 업데이트
+      // 모든 국가의 점수 및 통계 업데이트
       try {
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
         const countriesResponse = await fetch(`${apiUrl}/api/countries`);
         if (countriesResponse.ok) {
           const countriesData = (await countriesResponse.json()) as Array<{
             id?: unknown;
+            finance?: number;
+            population?: number;
+            happiness?: number;
+            military?: number;
             totalScore?: number;
           }>;
           const scores: Partial<Record<NationId, number>> = {};
+          const stats: Partial<NationStats> = {
+            goguryeo: { finance: 0, population: 0, happiness: 0, military: 0 },
+            baekje: { finance: 0, population: 0, happiness: 0, military: 0 },
+            silla: { finance: 0, population: 0, happiness: 0, military: 0 },
+          };
+          
           countriesData.forEach((country) => {
             if (isNationId(country.id)) {
               scores[country.id] = country.totalScore;
+              stats[country.id] = {
+                finance: country.finance ?? 0,
+                population: country.population ?? 0,
+                happiness: country.happiness ?? 0,
+                military: country.military ?? 0,
+              };
             }
           });
+          
           setAllNationScores(scores);
+          setAllNationStats(stats as NationStats);
         }
       } catch (scoresError) {
-        console.warn("국가 점수 업데이트 실패:", scoresError);
+        console.warn("국가 통계 업데이트 실패:", scoresError);
       }
 
       // 외교/군사 데이터 업데이트
@@ -1066,7 +1101,7 @@ export default function Home() {
                 setCurrentTotalScore(data.totalScore);
               }
               
-              // 모든 국가의 점수 가져오기
+              // 모든 국가의 통계 가져오기
               try {
                 const countriesResponse = await fetch(`${apiUrl}/api/countries`, {
                   signal: countryController.signal,
@@ -1074,19 +1109,37 @@ export default function Home() {
                 if (countriesResponse.ok) {
                   const countriesData = (await countriesResponse.json()) as Array<{
                     id?: unknown;
+                    finance?: number;
+                    population?: number;
+                    happiness?: number;
+                    military?: number;
                     totalScore?: number;
                   }>;
                   const scores: Partial<Record<NationId, number>> = {};
+                  const stats: Partial<NationStats> = {
+                    goguryeo: { finance: 0, population: 0, happiness: 0, military: 0 },
+                    baekje: { finance: 0, population: 0, happiness: 0, military: 0 },
+                    silla: { finance: 0, population: 0, happiness: 0, military: 0 },
+                  };
+                  
                   countriesData.forEach((country) => {
                     if (isNationId(country.id)) {
                       scores[country.id] = country.totalScore;
+                      stats[country.id] = {
+                        finance: country.finance ?? 0,
+                        population: country.population ?? 0,
+                        happiness: country.happiness ?? 0,
+                        military: country.military ?? 0,
+                      };
                     }
                   });
+                  
                   setAllNationScores(scores);
+                  setAllNationStats(stats as NationStats);
                 }
               } catch (scoresError) {
-                // 점수 로드 실패해도 계속 진행
-                console.warn("국가 점수 로드 실패:", scoresError);
+                // 통계 로드 실패해도 계속 진행
+                console.warn("국가 통계 로드 실패:", scoresError);
               }
             } catch (countryError) {
               clearTimeout(countryTimeoutId);
@@ -1360,6 +1413,7 @@ export default function Home() {
               label="재정" 
               value={stats.finance} 
               prevValue={prevStatsRef.current.finance}
+              change={lastChanges.finance}
               showArrow={turnChanged}
               suffix="원" 
               allNationStats={allNationStats}
@@ -1372,6 +1426,7 @@ export default function Home() {
               label="인구" 
               value={stats.population}
               prevValue={prevStatsRef.current.population}
+              change={lastChanges.population}
               showArrow={turnChanged}
               allNationStats={allNationStats}
               allNationScores={allNationScores}
@@ -1383,6 +1438,7 @@ export default function Home() {
               label="행복도" 
               value={stats.happiness} 
               prevValue={prevStatsRef.current.happiness}
+              change={lastChanges.happiness}
               showArrow={turnChanged}
               suffix="%"
               allNationStats={allNationStats}
@@ -1395,6 +1451,7 @@ export default function Home() {
               label="군사력" 
               value={stats.military}
               prevValue={prevStatsRef.current.military}
+              change={lastChanges.military}
               showArrow={turnChanged}
               allNationStats={allNationStats}
               allNationScores={allNationScores}

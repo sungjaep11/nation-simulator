@@ -64,9 +64,13 @@ interface Country {
     military: number;
   };
   feature: string;
+  lastFinanceChange?: number;
+  lastPopulationChange?: number;
+  lastMilitaryChange?: number;
+  lastHappinessChange?: number;
 }
 
-const countries: Country[] = [
+const defaultCountries: Country[] = [
   {
     id: "goguryeo",
     name: "고구려",
@@ -86,7 +90,7 @@ const countries: Country[] = [
     color: "#1E90FF",
     description:
       "해상 무역과 문화 예술이 발달한 백제는 일본, 중국과의 교류가 활발합니다.",
-  stats: { finance: 18000, population: 60000, military: 10 },
+    stats: { finance: 18000, population: 60000, military: 10 },
     feature: "풍부한 재정",
   },
   {
@@ -114,11 +118,52 @@ const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
   const [isTransitionFadingOut, setIsTransitionFadingOut] = useState(false);
   const [subtitlePair, setSubtitlePair] = useState<0 | 1 | null>(null);
   const [isFirstPairFadingOut, setIsFirstPairFadingOut] = useState(false);
+  const [countries, setCountries] = useState<Country[]>(defaultCountries);
   const dystopiaVideoRef = useRef<HTMLVideoElement>(null);
   const introVideoRef = useRef<HTMLVideoElement>(null);
   const bgmRef = useRef<HTMLAudioElement>(null);
   const selectSoundRef = useRef<HTMLAudioElement>(null);
   const transitionTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // API에서 국가 정보 가져오기
+  useEffect(() => {
+    const fetchCountries = async () => {
+      try {
+        const response = await fetch('http://127.0.0.1:8000/api/countries');
+        if (!response.ok) throw new Error('Failed to fetch countries');
+        
+        const apiCountries = await response.json();
+        
+        // API 데이터와 기본 정보 병합
+        const mergedCountries = defaultCountries.map(defaultCountry => {
+          const apiCountry = apiCountries.find((c: any) => c.id === defaultCountry.id);
+          if (apiCountry) {
+            return {
+              ...defaultCountry,
+              stats: {
+                finance: apiCountry.finance,
+                population: apiCountry.population,
+                military: apiCountry.military,
+              },
+              lastFinanceChange: apiCountry.lastFinanceChange || 0,
+              lastPopulationChange: apiCountry.lastPopulationChange || 0,
+              lastMilitaryChange: apiCountry.lastMilitaryChange || 0,
+              lastHappinessChange: apiCountry.lastHappinessChange || 0,
+            };
+          }
+          return defaultCountry;
+        });
+        
+        setCountries(mergedCountries);
+      } catch (error) {
+        console.error('Failed to fetch countries:', error);
+        // 실패하면 기본값 사용
+        setCountries(defaultCountries);
+      }
+    };
+
+    fetchCountries();
+  }, []);
 
   // 비디오 자동 재생
   useEffect(() => {
@@ -672,9 +717,24 @@ const handleSelectCountry = (countryId: string) => {
 
                     {/* Stats */}
                     <div className="grid grid-cols-3 gap-2 text-center mb-0">
-                      <Stat label="재정" value={country.stats.finance} color="#FFD700" />
-                      <Stat label="인구" value={country.stats.population} color="#90EE90" />
-                      <Stat label="군사력" value={country.stats.military} color="#FF6B6B" />
+                      <Stat 
+                        label="재정" 
+                        value={country.stats.finance} 
+                        color="#FFD700"
+                        change={country.lastFinanceChange}
+                      />
+                      <Stat 
+                        label="인구" 
+                        value={country.stats.population} 
+                        color="#90EE90"
+                        change={country.lastPopulationChange}
+                      />
+                      <Stat 
+                        label="군사력" 
+                        value={country.stats.military} 
+                        color="#FF6B6B"
+                        change={country.lastMilitaryChange}
+                      />
                     </div>
 
                     {/* Character */}
@@ -742,11 +802,16 @@ function Stat({
   label,
   value,
   color,
+  change,
 }: {
   label: string;
   value: number;
   color: string;
+  change?: number;
 }) {
+  const changeColor = change === undefined || change === 0 ? '#6B6B6B' : change > 0 ? '#90EE90' : '#FF6B6B';
+  const changeSymbol = change === undefined || change === 0 ? '' : change > 0 ? '+' : '';
+  
   return (
     <div 
       className="bg-black/30 rounded-lg"
@@ -771,6 +836,17 @@ function Stat({
       >
         {label}
       </p>
+      {change !== undefined && change !== 0 && (
+        <p 
+          style={{
+            color: changeColor,
+            fontSize: 'clamp(0.5rem, 1vw, 0.625rem)',
+            marginTop: '0.25rem',
+          }}
+        >
+          {changeSymbol}{change.toLocaleString()}
+        </p>
+      )}
     </div>
   );
 }
