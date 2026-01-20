@@ -130,7 +130,7 @@ async def get_gemini_game_data(user_input: str, current_stats: dict, all_countri
 [유저 명령] "{user_input}"
 
 ### 필수 규칙 ###
-1. changes 필드는 유저의 명령과 생성할 시나리오와 뉴스에 맞게 설정하세요:
+1. changes 필드는 유저의 명령과 생성할 시나리오와 뉴스에 맞게 설정하세요(절대 모든 값을 0으로 설정하지 마세요):
    - 적극적인 명령(전쟁, 개혁, 건설): 큰 변화 (finance/population: -100~100, happiness, military: -10~10)
    - 소극적인 명령(내정, 평화): 작은 변화 (finance/population: -20~20, happiness, military: -5~5)
    - 군사 증강: military 1~5 증가, finance 감소
@@ -183,7 +183,7 @@ async def get_gemini_game_data(user_input: str, current_stats: dict, all_countri
         "평화로운 외교 담판 진행"
     ],
     "secret_news": ["비밀 정보나 작전 내용"],
-    "changes": {{"finance": 0, "population": 0, "military": 0, "happiness": 0}},
+    "changes": {{"finance": -50, "population": 100, "military": 3, "happiness": 5}},
     "actions": [
         {{"type": "add_military", "name": "철기병", "count": 50, "icon": "🐎", "unit_type": "regular"}},
         {{"type": "war", "target": "고구려", "outcome": "승리", "land_gained": 5, "land_lost": 0, "casualties": 200}}
@@ -298,8 +298,9 @@ async def get_ai_country_turn(country_stats: dict, all_countries: dict) -> dict:
    - secret_operation: 도발, 암살, 스파이 활동
 
 5. **게임 진행 가속화 (중요!)**:
-   - 매 턴마다 큰 변화를 일으키세요 (소극적 진행 금지)
-   - 전쟁은 무조건 전면전 규모 (최소 casualties 100명, 영토 변화 3칸 이상)
+   - 명령 준수 우선: actions는 반드시 [유저 명령]에 명시된 활동을 우선적으로 반영해야 합니다. 유저가 전쟁을 언급하지 않았다면, 정당한 이유(타국의 선제공격 등) 없이 war 액션을 생성하지 마세요.
+   - 인과관계의 명확성: 모든 수치 변화(changes)와 액션(actions)은 앞서 작성한 scenario와 논리적으로 일치해야 합니다.
+   - 선택적 액션: 유저의 명령이 단순하다면 actions 배열은 비어있을 수 있습니다. 억지로 전쟁이나 대규모 액션을 끼워 넣지 마세요.
    - 외교는 정확히 50% 확률로 성공/실패
    - 군사 증강 시 최소 50명 이상 모집
 
