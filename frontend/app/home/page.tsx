@@ -908,9 +908,9 @@ export default function Home() {
         // 백엔드에서 전달된 변화값 저장 (없으면 차이값으로 대체)
         setLastChanges({
           finance: newStats.lastFinanceChange ?? financeDiff ?? 0,
-          population: newStats.lastPopulationChange ?? (newStats.population - prev.population) ?? 0,
-          happiness: newStats.lastHappinessChange ?? (newStats.happiness - prev.happiness) ?? 0,
-          military: newStats.lastMilitaryChange ?? (newStats.military - prev.military) ?? 0,
+          population: newStats.lastPopulationChange ?? (newStats.population - prev.population),
+          happiness: newStats.lastHappinessChange ?? (newStats.happiness - prev.happiness),
+          military: newStats.lastMilitaryChange ?? (newStats.military - prev.military),
         });
         
         return updatedStats;
