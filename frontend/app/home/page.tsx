@@ -461,6 +461,9 @@ function DiplomacyInfo({
         
         // 국가 이름을 한글로 변환
         const displayName = getNationNameInKorean(nationId);
+        
+        // 외교 상태를 한글로 통일 (neutral -> 중립)
+        const normalizedStatus = relation.status === "neutral" ? "중립" : relation.status;
 
         return (
           <div
@@ -497,7 +500,7 @@ function DiplomacyInfo({
                       : "bg-yellow-900/50 text-yellow-400"
                 }`}
               >
-                {relation.status}
+                {normalizedStatus}
               </span>
             </div>
           </div>

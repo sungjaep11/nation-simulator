@@ -4,9 +4,9 @@ from sqlmodel import Session, select
 from datetime import datetime, timedelta
 import random
 import asyncio
-from backend.database import engine, create_db_and_tables, get_session
-from backend.models import Country, CommandLog, NewsItem, MilitaryUnit, Diplomacy, SecretIntelligence, User
-from backend.ai_service import get_gemini_game_data, get_ai_country_turn
+from database import engine, create_db_and_tables, get_session
+from models import Country, CommandLog, NewsItem, MilitaryUnit, Diplomacy, SecretIntelligence, User
+from ai_service import get_gemini_game_data, get_ai_country_turn
 import httpx
 import os
 import jwt
@@ -831,7 +831,7 @@ async def get_diplomacy(
         {
             "id": d.id,
             "targetName": d.targetName,
-            "status": d.status,
+            "status": "중립" if d.status == "neutral" else d.status,
             "favorability": d.favorability
         }
         for d in relations
@@ -1024,7 +1024,7 @@ async def handle_game_turn(
     user_diplomacy = [
         {
             "targetName": d.targetName,
-            "status": d.status,
+            "status": "중립" if d.status == "neutral" else d.status,
             "favorability": d.favorability
         }
         for d in diplomacy_relations
@@ -1058,7 +1058,7 @@ async def handle_game_turn(
             all_countries_dict[other_country_original_id]["diplomacy"] = [
                 {
                     "targetName": d.targetName,
-                    "status": d.status,
+                    "status": "중립" if d.status == "neutral" else d.status,
                     "favorability": d.favorability
                 }
                 for d in other_diplomacy
@@ -1195,6 +1195,9 @@ async def handle_game_turn(
             # 외교 관계 업데이트 (우호 형성 완화)
             target_name = action.get('target')
             status = action.get('status', '중립')
+            # neutral을 중립으로 통일
+            if status == 'neutral':
+                status = '중립'
             # 기본 우호도 변화폭을 +15로 높여 우호 형성을 쉽게 함
             favorability = action.get('favorability', 15)
             
@@ -1371,6 +1374,9 @@ async def handle_game_turn(
             elif action_type == 'diplomacy':
                 target_name = action.get('target')
                 status = action.get('status', '중립')
+                # neutral을 중립으로 통일
+                if status == 'neutral':
+                    status = '중립'
                 # AI도 기본 우호도 변화폭을 +15로 높여 관계 형성을 쉽게 함
                 favorability = action.get('favorability', 15)
                 
@@ -1461,6 +1467,10 @@ async def update_diplomacy(
     session: Session = Depends(get_session)
 ):
     """외교 관계 업데이트"""
+    # neutral을 중립으로 통일
+    if status == 'neutral':
+        status = '중립'
+    
     # 기존 외교 관계 찾기
     statement = select(Diplomacy).where(
         (Diplomacy.sourceID == country_id) & 
@@ -1486,7 +1496,7 @@ async def update_diplomacy(
     return {
         "id": diplomacy.id,
         "targetName": diplomacy.targetName,
-        "status": diplomacy.status,
+        "status": "중립" if diplomacy.status == "neutral" else diplomacy.status,
         "favorability": diplomacy.favorability
     }
 
