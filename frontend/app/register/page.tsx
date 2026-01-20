@@ -88,6 +88,11 @@ export default function RegisterPage() {
       localStorage.setItem("session_token", sessionToken);
       localStorage.setItem("username", user.name);
       localStorage.setItem("email", user.email);
+      
+      // 회원가입 시 이전 선택 기록 삭제 (새 계정이므로)
+      if (user.email) {
+        localStorage.removeItem(`selected_country:${user.email}`);
+      }
 
       // 게임 데이터 초기화 후 국가 선택 페이지로 이동
       router.push("/selection");
@@ -100,7 +105,7 @@ export default function RegisterPage() {
 
   return (
     <div 
-      className="min-h-screen w-full flex items-center justify-center"
+      className="h-screen w-full flex items-center justify-center overflow-hidden"
       style={{
         backgroundImage: 'url(/login/temple.png)',
         backgroundSize: 'cover',
@@ -109,8 +114,8 @@ export default function RegisterPage() {
       }}
     >
       <div className="absolute inset-0 bg-[#0D0D0D]/60"></div>
-      <div className="relative z-10 w-full max-w-lg px-6">
-        <div className="glass-panel rounded-lg p-8 animate-fade-in-up">
+      <div className="relative z-10 w-full max-w-lg px-6 py-4">
+        <div className="glass-panel rounded-lg p-8 animate-fade-in-up max-h-[90vh] overflow-y-auto">
           {/* Header */}
           <div className="text-center mb-8">
             <div className="flex justify-center mb-4">

@@ -146,8 +146,13 @@ const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
         
         if (response.ok) {
           const countries = await response.json();
-          // 저장된 국가가 유효하면 해당 국가로 이동
-          if (countries && Array.isArray(countries)) {
+          // 국가가 3개 모두 있으면 초기화된 상태이므로 선택 화면 표시
+          if (countries && Array.isArray(countries) && countries.length === 3) {
+            // 초기화된 상태에서는 선택 기록이 있어도 선택 화면을 보여줌
+            return;
+          }
+          // 저장된 국가가 유효하고 게임이 진행 중이면 해당 국가로 이동
+          if (countries && Array.isArray(countries) && countries.length > 0) {
             const hasStoredCountry = countries.some(
               (country) => country?.id === storedCountry
             );
