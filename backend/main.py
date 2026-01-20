@@ -4,9 +4,9 @@ from sqlmodel import Session, select
 from datetime import datetime, timedelta
 import random
 import asyncio
-from database import engine, create_db_and_tables, get_session
-from models import Country, CommandLog, NewsItem, MilitaryUnit, Diplomacy, SecretIntelligence, User
-from ai_service import get_gemini_game_data, get_ai_country_turn
+from backend.database import engine, create_db_and_tables, get_session
+from backend.models import Country, CommandLog, NewsItem, MilitaryUnit, Diplomacy, SecretIntelligence, User
+from backend.ai_service import get_gemini_game_data, get_ai_country_turn
 import httpx
 import os
 import jwt
@@ -1159,11 +1159,19 @@ async def handle_game_turn(
             country.military += unit_count
         
         elif action_type == 'diplomacy':
-            # 외교 관계 업데이트 (우호 형성 완화)
+            # 외교 관계 업데이트 (50% 확률로 성공/실패)
+            import random
             target_name = action.get('target')
             status = action.get('status', '중립')
-            # 기본 우호도 변화폭을 +15로 높여 우호 형성을 쉽게 함
             favorability = action.get('favorability', 15)
+            
+            # 50% 확률로 성공/실패
+            success = random.random() < 0.5
+            if not success:
+                # 실패 시 favorability를 절반으로 감소 또는 음수로 전환
+                favorability = -abs(favorability) // 2
+                # 뉴스에 실패 메시지 추가
+                public_news.append(f"{target_name}와의 외교 담판이 결렬되었습니다.")
             
             stmt = select(Diplomacy).where(
                 (Diplomacy.sourceID == country_id) & 
@@ -1172,13 +1180,13 @@ async def handle_game_turn(
             existing_diplomacy = session.exec(stmt).first()
             
             if existing_diplomacy:
-                existing_diplomacy.status = status
+                existing_diplomacy.status = status if success else existing_diplomacy.status
                 existing_diplomacy.favorability = max(-100, min(100, existing_diplomacy.favorability + favorability))
             else:
                 new_diplomacy = Diplomacy(
                     sourceID=country_id,
                     targetName=target_name,
-                    status=status,
+                    status=status if success else '중립',
                     favorability=max(-100, min(100, favorability))
                 )
                 session.add(new_diplomacy)
@@ -1333,10 +1341,15 @@ async def handle_game_turn(
                 other_country_db.military += unit_count
             
             elif action_type == 'diplomacy':
+                import random
                 target_name = action.get('target')
                 status = action.get('status', '중립')
-                # AI도 기본 우호도 변화폭을 +15로 높여 관계 형성을 쉽게 함
                 favorability = action.get('favorability', 15)
+                
+                # 50% 확률로 성공/실패
+                success = random.random() < 0.5
+                if not success:
+                    favorability = -abs(favorability) // 2
                 
                 stmt = select(Diplomacy).where(
                     (Diplomacy.sourceID == other_country_db.id) & 
@@ -1345,13 +1358,13 @@ async def handle_game_turn(
                 existing_diplomacy = session.exec(stmt).first()
                 
                 if existing_diplomacy:
-                    existing_diplomacy.status = status
+                    existing_diplomacy.status = status if success else existing_diplomacy.status
                     existing_diplomacy.favorability = max(-100, min(100, existing_diplomacy.favorability + favorability))
                 else:
                     new_diplomacy = Diplomacy(
                         sourceID=other_country_db.id,
                         targetName=target_name,
-                        status=status,
+                        status=status if success else '중립',
                         favorability=max(-100, min(100, favorability))
                     )
                     session.add(new_diplomacy)
