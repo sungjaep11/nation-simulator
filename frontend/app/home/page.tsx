@@ -993,7 +993,10 @@ export default function Home() {
             const militaryResponse = await fetch(`${apiUrl}/api/country/${selectedNation}/military?session_token=${encodeURIComponent(sessionToken)}`);
             if (militaryResponse.ok) {
               const militaryData = await militaryResponse.json() as MilitaryUnit[];
+              console.log('🔍 군사 데이터 업데이트:', militaryData);
               setMilitaryData(militaryData);
+            } else {
+              console.error('군사 데이터 응답 실패:', militaryResponse.status, militaryResponse.statusText);
             }
           }
         } catch (militaryError) {
