@@ -54,14 +54,27 @@ GOOGLE_JWKS_URL = "https://www.googleapis.com/oauth2/v3/certs"
 app = FastAPI()
 
 # CORS configuration for frontend-backend communication
-origins = [
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-]
+# Allow all origins in development if ALLOW_ALL_ORIGINS is set to "true"
+# Otherwise, use specific origins from env or default localhost origins
+allow_all_origins = os.getenv("ALLOW_ALL_ORIGINS", "false").lower() == "true"
+
+if allow_all_origins:
+    # Development mode: allow all origins
+    origins = ["*"]
+else:
+    # Production/restricted mode: use specific origins
+    origins = [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ]
+    # Add additional origins from environment variable (comma-separated)
+    additional_origins = os.getenv("CORS_ORIGINS", "")
+    if additional_origins:
+        origins.extend([origin.strip() for origin in additional_origins.split(",") if origin.strip()])
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=origins if not allow_all_origins else ["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

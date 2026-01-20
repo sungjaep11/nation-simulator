@@ -99,10 +99,33 @@ pip install -r requirements.txt
 
 # .env 파일 설정
 GEMINI_API_KEY=your_actual_api_key
+GOOGLE_CLIENT_ID=your_google_client_id
+
+# CORS 설정 (선택사항)
+# 개발 환경에서 모든 origin 허용하려면:
+ALLOW_ALL_ORIGINS=true
+
+# 또는 특정 origins만 허용하려면 (쉼표로 구분):
+CORS_ORIGINS=http://localhost:3000,http://192.168.1.100:3000,http://your-domain.com
 
 # 서버 실행
 uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
+
+## 환경 변수 설정
+
+### 필수 환경 변수
+- `GEMINI_API_KEY`: Google Gemini API 키
+- `GOOGLE_CLIENT_ID`: Google OAuth 클라이언트 ID (Google 로그인 사용 시)
+
+### 선택적 환경 변수
+- `ALLOW_ALL_ORIGINS`: `true`로 설정하면 모든 origin에서의 요청을 허용 (개발 환경용)
+- `CORS_ORIGINS`: 허용할 origin 목록 (쉼표로 구분), 예: `http://localhost:3000,http://192.168.1.100:3000`
+
+### CORS 문제 해결
+다른 컴퓨터에서 접속이 안 되는 경우:
+1. `ALLOW_ALL_ORIGINS=true`를 `.env` 파일에 추가 (개발 환경에서만 사용)
+2. 또는 `CORS_ORIGINS`에 해당 컴퓨터의 IP 주소와 포트를 추가
 
 ## 변경사항 요약
 
