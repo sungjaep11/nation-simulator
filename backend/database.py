@@ -28,7 +28,7 @@ engine = create_engine(
 )
 
 def migrate_add_last_change_columns():
-    """country 테이블에 last_*_change 컬럼 추가 (마이그레이션)"""
+    """country 테이블에 last_*_change 컬럼 및 provinces 컬럼 추가 (마이그레이션)"""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     
@@ -51,6 +51,9 @@ def migrate_add_last_change_columns():
         
         if "is_active" not in columns:
             cursor.execute("ALTER TABLE country ADD COLUMN is_active INTEGER DEFAULT 1")
+        
+        if "provinces" not in columns:
+            cursor.execute("ALTER TABLE country ADD COLUMN provinces TEXT DEFAULT '[]'")
         
         conn.commit()
     except Exception as e:
