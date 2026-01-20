@@ -312,7 +312,7 @@ def sanitize_ai_response_diplomacy(ai_data: dict) -> dict:
     
     Returns:
         status 값이 한글로 보정된 응답 데이터
-    """
+"""
     if 'actions' not in ai_data:
         return ai_data
     
@@ -323,6 +323,98 @@ def sanitize_ai_response_diplomacy(ai_data: dict) -> dict:
             if original_status != normalized_status:
                 print(f"🔄 [데이터 보정] 외교 status 변환: '{original_status}' -> '{normalized_status}'")
             action['status'] = normalized_status
+    
+    return ai_data
+
+
+def sanitize_ai_response_scenario(ai_data: dict, all_countries: dict, user_input: str = "") -> dict:
+    """
+    AI 응답의 scenario 텍스트에서 잘못된 지역명을 실제 게임 상태에 맞게 보정합니다.
+    
+    Args:
+        ai_data: AI가 반환한 응답 데이터
+        all_countries: 모든 국가의 현재 상태 (provinces 포함)
+        user_input: 사용자 입력 (지역명 추출용)
+    
+    Returns:
+        scenario 텍스트가 보정된 응답 데이터
+    """
+    if 'scenario' not in ai_data or not ai_data['scenario']:
+        return ai_data
+    
+    scenario_text = ai_data['scenario']
+    original_scenario = scenario_text
+    
+    # 사용자 입력에서 지역명 추출
+    user_mentioned_provinces = []
+    if user_input:
+        for province in ALL_PROVINCE_NAMES:
+            if province in user_input:
+                user_mentioned_provinces.append(province)
+    
+    # actions에서 실제로 일어난 일 확인 (특히 전쟁 액션)
+    war_actions = [a for a in ai_data.get('actions', []) if a.get('type') == 'war']
+    
+    for action in war_actions:
+        captured_provinces = action.get('captured_provinces', [])
+        target_country_name = action.get('target', '')
+        
+        if captured_provinces and target_country_name:
+            # 상대방 국가의 실제 영토 확인
+            target_country_data = None
+            for country_id, country_data in all_countries.items():
+                if country_data.get('name') == target_country_name:
+                    target_country_data = country_data
+                    break
+            
+            if target_country_data:
+                # scenario 텍스트에서 언급된 지역명 추출
+                scenario_mentioned_provinces = []
+                for province in ALL_PROVINCE_NAMES:
+                    if province in scenario_text:
+                        scenario_mentioned_provinces.append(province)
+                
+                # 보정 우선순위:
+                # 1. 사용자 입력에 언급된 지역명이 있으면 그것을 우선 사용
+                # 2. captured_provinces에 있는 지역명 사용
+                # 3. 상대방 영토에 있는 지역명 사용
+                
+                correct_provinces = []
+                if user_mentioned_provinces:
+                    # 사용자 입력의 지역명 중 실제 점령 지역과 일치하는 것 우선
+                    for user_province in user_mentioned_provinces:
+                        if user_province in captured_provinces:
+                            correct_provinces.append(user_province)
+                    # 일치하는 게 없으면 사용자 입력의 첫 번째 지역명 사용
+                    if not correct_provinces and user_mentioned_provinces:
+                        correct_provinces = [user_mentioned_provinces[0]]
+                elif captured_provinces:
+                    correct_provinces = captured_provinces
+                elif target_country_data.get('provinces'):
+                    correct_provinces = target_country_data.get('provinces', [])[:len(scenario_mentioned_provinces)]
+                
+                # scenario에 잘못된 지역명이 있으면 올바른 지역명으로 교체
+                if correct_provinces:
+                    for i, mentioned_province in enumerate(scenario_mentioned_provinces):
+                        # 사용자 입력에 지역명이 있고, scenario의 지역명이 사용자 입력과 다르면 교체
+                        if user_mentioned_provinces:
+                            if mentioned_province not in user_mentioned_provinces:
+                                # 사용자 입력의 지역명으로 교체
+                                correct_province = user_mentioned_provinces[min(i, len(user_mentioned_provinces) - 1)]
+                                scenario_text = scenario_text.replace(mentioned_province, correct_province)
+                                print(f"🔄 [시나리오 보정] 사용자 입력과 불일치: '{mentioned_province}' -> '{correct_province}'로 교체")
+                        # 사용자 입력이 없거나, 실제 점령 지역 목록에 없거나, 상대방 영토에도 없는 경우
+                        elif (mentioned_province not in captured_provinces and 
+                              mentioned_province not in target_country_data.get('provinces', [])):
+                            # 올바른 지역명으로 교체
+                            correct_province = correct_provinces[min(i, len(correct_provinces) - 1)]
+                            scenario_text = scenario_text.replace(mentioned_province, correct_province)
+                            print(f"🔄 [시나리오 보정] 잘못된 지역명 '{mentioned_province}' -> '{correct_province}'로 교체")
+    
+    # scenario 텍스트가 변경되었으면 업데이트
+    if scenario_text != original_scenario:
+        ai_data['scenario'] = scenario_text
+        print(f"✅ [시나리오 보정 완료] 원본: {original_scenario[:100]}... -> 수정: {scenario_text[:100]}...")
     
     return ai_data
 
@@ -1428,6 +1520,9 @@ async def handle_game_turn(
     
     # AI 응답 데이터 보정 (영문 status -> 한글 변환)
     ai_data = sanitize_ai_response_diplomacy(ai_data)
+    
+    # AI 응답 데이터 보정 (scenario 텍스트의 지역명 보정)
+    ai_data = sanitize_ai_response_scenario(ai_data, all_countries_dict, user_input)
 
     # 유저 국가 DB 수치 업데이트
     changes = ai_data.get('changes', {})

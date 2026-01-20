@@ -191,6 +191,19 @@ async def get_gemini_game_data(user_input: str, current_stats: dict, all_countri
                 if "provinces" in country_data:
                     other_countries_lite[country_id]["provinces"] = country_data["provinces"]
         
+        # 현재 국가의 영토 정보 추출
+        my_provinces = current_stats.get('provinces', [])
+        my_provinces_info = f"\n[내 보유 영토] {json.dumps(my_provinces, ensure_ascii=False)}" if my_provinces else ""
+        
+        # 각 국가별 영토 정보를 명확히 표시
+        provinces_summary = ""
+        if all_countries:
+            for country_id, country_data in all_countries.items():
+                country_name = country_data.get('name', country_id)
+                country_provinces = country_data.get('provinces', [])
+                if country_provinces:
+                    provinces_summary += f"\n- {country_name}의 영토: {', '.join(country_provinces)}"
+        
         prompt = f"""
 [역할] 삼국시대 전략 게임 마스터 AI. 유저 명령을 데이터 기반 JSON으로 변환.
 
@@ -199,12 +212,18 @@ async def get_gemini_game_data(user_input: str, current_stats: dict, all_countri
 2. 전쟁 인과관계: 전쟁(`type: war`)이 포함된 경우 'population' 변화량은 반드시 0 이하(음수)로 설정할 것.
 3. 외교 상태: 'status' 필드는 반드시 "동맹", "중립", "적대" 중 하나만 사용(영문 절대 금지).
 4. 유닛 생성: 명령이 없을 때 무분별한 유닛(첩자 등) 생성을 자제하고, 유저가 요청한 유닛(해군 등)을 우선 반영할 것.
+5. **[매우 중요] scenario 텍스트에서 언급하는 지역명은 반드시 실제 게임 상태와 일치해야 합니다.**
+   - scenario에서 지역명을 언급할 때는 반드시 아래 [현재 영토 현황]에 나열된 실제 영토만 언급하세요.
+   - 예를 들어, 경상북도를 공격했다면 scenario에도 "경상북도"라고 정확히 언급해야 합니다.
+   - 함경도, 경상북도 등 실제로 존재하지 않거나 잘못된 지역명을 사용하지 마세요.
 
 [입력 데이터 정보]
 - 내 국가: {current_stats.get('name')}
-- 내 스탯: {json.dumps(current_stats_lite, ensure_ascii=False)}
+- 내 스탯: {json.dumps(current_stats_lite, ensure_ascii=False)}{my_provinces_info}
 - 타국 현황: {json.dumps(other_countries_lite, ensure_ascii=False)}
 - 유저 명령: "{user_input}"
+
+[현재 영토 현황]{provinces_summary}
 
 [출력 JSON 형식]
 {{
