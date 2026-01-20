@@ -290,6 +290,10 @@ async def get_gemini_game_data(user_input: str, current_stats: dict, all_countri
             result['actions'] = []
         if 'public_news' not in result:
             result['public_news'] = result.get('news', [])  # 하위 호환성
+        # public_news가 비어있거나 없으면 기본 뉴스 생성
+        if not result.get('public_news') or len(result.get('public_news', [])) == 0:
+            country_name = current_stats.get('name', '국가')
+            result['public_news'] = [f"{country_name}이(가) 안정적으로 발전하고 있습니다."]
         if 'secret_news' not in result:
             result['secret_news'] = []
         if 'mood' not in result:
@@ -455,6 +459,9 @@ async def get_ai_country_turn(country_stats: dict, all_countries: dict) -> dict:
             result['actions'] = []
         if 'public_news' not in result:
             result['public_news'] = result.get('news', [])
+        # public_news가 비어있거나 없으면 기본 뉴스 생성
+        if not result.get('public_news') or len(result.get('public_news', [])) == 0:
+            result['public_news'] = [f"{country_stats.get('name', '국가')}이(가) 안정적으로 발전하고 있습니다."]
         if 'secret_news' not in result:
             result['secret_news'] = []
         if 'mood' not in result:
