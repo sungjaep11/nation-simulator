@@ -217,13 +217,41 @@ async def get_gemini_game_data(user_input: str, current_stats: dict, all_countri
         # 텍스트 생성 요청
         response_text = await _generate_text_with_retry(prompt, model_name=AI_MODEL)
         
+        # 디버깅: 원본 응답 출력
+        print("=" * 80)
+        print("🤖 Gemini API Raw Response:")
+        print(response_text)
+        print("=" * 80)
+        
         # JSON 문자열 추출 및 파싱
-        clean_json = response_text.replace('```json', '').replace('```', '').strip()
+        clean_json = response_text.strip()
+        
+        # JSON 코드 블록 제거
+        if '```json' in clean_json:
+            start = clean_json.find('```json') + 7
+            end = clean_json.find('```', start)
+            if end != -1:
+                clean_json = clean_json[start:end].strip()
+        elif '```' in clean_json:
+            start = clean_json.find('```') + 3
+            end = clean_json.find('```', start)
+            if end != -1:
+                clean_json = clean_json[start:end].strip()
+        
+        # JSON 객체 찾기 (중괄호로 시작하는 부분)
+        start_brace = clean_json.find('{')
+        end_brace = clean_json.rfind('}')
+        if start_brace != -1 and end_brace != -1 and end_brace > start_brace:
+            clean_json = clean_json[start_brace:end_brace + 1]
+        
+        if not clean_json:
+            raise ValueError("응답에서 JSON을 찾을 수 없습니다.")
+        
         result = json.loads(clean_json)
         
-        # 디버깅: Gemini API 응답 출력
+        # 디버깅: 파싱된 JSON 출력
         print("=" * 80)
-        print("🤖 Gemini API Response:")
+        print("🤖 Parsed JSON:")
         print(json.dumps(result, ensure_ascii=False, indent=2))
         print("=" * 80)
         
@@ -238,9 +266,21 @@ async def get_gemini_game_data(user_input: str, current_stats: dict, all_countri
             result['mood'] = 'neutral'  # 기본값
         
         return result
+    except json.JSONDecodeError as e:
+        # JSON 파싱 오류 발생 시 상세 정보 출력
+        print(f"JSON 파싱 오류: {e}")
+        # 변수 접근 (try 블록에서 정의되었을 수 있음)
+        response_text_val = locals().get('response_text', 'N/A')
+        clean_json_val = locals().get('clean_json', 'N/A')
+        print(f"응답 텍스트: {response_text_val}")
+        print(f"정리된 JSON: {clean_json_val}")
+        # 모의 응답 반환
+        return _get_mock_response(user_input, current_stats)
     except Exception as e:
         # API 오류 발생 시 모의 응답 반환
         print(f"Gemini API Error: {e}")
+        import traceback
+        traceback.print_exc()
         return _get_mock_response(user_input, current_stats)
 
 
@@ -296,12 +336,12 @@ async def get_ai_country_turn(country_stats: dict, all_countries: dict) -> dict:
    - **전쟁은 소규모 충돌부터 시작 가능 (전면전만 강제하지 않음)**
 
 2. 수치 설정 (플레이어 국가와 유사한 규모 유지):
-   - 적극적인 행동(전쟁, 개혁, 건설): 중간 변화 (finance/population: -50~50, happiness, military: -3~5)
-   - 소극적인 행동(내정, 평화): 작은 변화 (finance/population: -20~20, happiness, military: -2~2)
-   - 군사 증강: military 1~3 증가, finance 적절히 감소
+   - 적극적인 행동(전쟁, 개혁, 건설): 중간 변화 (finance/population: -50~50, happiness, military: -2~3)
+   - 소극적인 행동(내정, 평화): 작은 변화 (finance/population: -20~20, happiness, military: -1~1)
+   - 군사 증강: military 0~2 증가 (매우 제한적), finance 적절히 감소
    - 외교: happiness, favorability 변화
    - 실패/저항: 음수 변화
-   - **중요: 플레이어 국가의 진행 속도와 유사한 수준의 변화를 유지하세요. 과도하게 큰 변화는 피하세요.**
+   - **중요: 플레이어 국가의 진행 속도와 유사한 수준의 변화를 유지하세요. 특히 군사력 증가는 매우 제한적으로 유지하세요.**
 
 3. 다양한 Mood 생성 (균형있게):
    - happy (25%): 전쟁 승리, 영토 확장, 외교 성공, 경제 호황
@@ -310,20 +350,22 @@ async def get_ai_country_turn(country_stats: dict, all_countries: dict) -> dict:
    - depressed (10%): 큰 손실, 영토 상실, 멸망 위기
 
 4. 액션 선택 (균형있게):
-   - add_military: 군력이 약하면 가끔 생성 (30% 확률), **유닛명을 구체적으로 (철기병, 궁병, 첩자 등), 수량은 20~50명 정도로 제한**
+   - add_military: **매우 드물게만 생성 (10~15% 확률, 3~4턴에 한 번 정도)**, **유닛명을 구체적으로 (철기병, 궁병, 첩자 등), 수량은 10~25명 정도로 매우 제한적**
    - war: **정당한 이유가 있을 때만 전쟁 시작. outcome은 50% 확률로 승리/패배. land_gained/land_lost는 1~5 영토 (플레이어와 유사한 규모)**
    - diplomacy: **50% 확률로 성공(favorability +20~30) 또는 실패(favorability -10~15), status는 반드시 한글 "동맹", "중립", "적대" 사용**
    - secret_operation: 가끔 사용 (10% 확률)
    - **액션은 선택적입니다. 매 턴마다 액션이 필요하지 않습니다. 내정에 집중하는 턴도 정상적입니다.**
+   - **군사 증강은 매우 드물게만 하세요. 대부분의 턴은 내정이나 외교에 집중하세요.**
 
 5. **균형잡힌 게임 진행 (중요!)**:
    - 플레이어 국가의 진행 속도와 유사한 수준을 유지하세요
    - 인과관계의 명확성: 모든 수치 변화(changes)와 액션(actions)은 앞서 작성한 scenario와 논리적으로 일치해야 합니다.
    - 선택적 액션: actions 배열은 비어있을 수 있습니다. 억지로 전쟁이나 대규모 액션을 끼워 넣지 마세요.
    - 외교는 정확히 50% 확률로 성공/실패
-   - 군사 증강 시 20~50명 정도로 제한 (과도한 증강 금지)
+   - **군사 증강은 매우 드물게만 하세요 (10~15% 확률, 3~4턴에 한 번). 수량은 10~25명으로 매우 제한적. 과도한 군사 증강은 절대 금지**
    - 전쟁 casualties는 50~200명 정도로 제한 (플레이어와 유사한 규모)
    - **중요: 이 함수는 AI가 자율적으로 운영하는 국가의 턴을 처리합니다. 유저 명령과는 무관합니다.**
+   - **군사력 증가를 최소화하고, 대부분의 턴은 내정(재정, 인구, 행복도)에 집중하세요.**
 
 응답 JSON 형식:
 {{
@@ -335,12 +377,13 @@ async def get_ai_country_turn(country_stats: dict, all_countries: dict) -> dict:
         "경제 정책 발표"
     ],
     "secret_news": ["비밀 작전, 전쟁 계획 등"],
-    "changes": {{"finance": 30, "population": 25, "military": 1, "happiness": 2}},
+    "changes": {{"finance": 30, "population": 25, "military": 0, "happiness": 2}},
     "actions": [
-        {{"type": "add_military", "name": "철기병", "count": 30, "icon": "🐎", "unit_type": "regular"}},
+        {{"type": "add_military", "name": "철기병", "count": 15, "icon": "🐎", "unit_type": "regular"}},
         {{"type": "war", "target": "약한_국가명", "outcome": "승리", "land_gained": 3, "land_lost": 0, "casualties": 100}},
         {{"type": "diplomacy", "target": "국가명", "status": "동맹", "favorability": 25}}
      * status는 반드시 한글 "동맹", "중립", "적대" 중 하나 사용
+     * add_military는 매우 드물게만 포함 (대부분의 턴에는 actions가 비어있거나 다른 액션만 포함)
     ]
 }}
         """
@@ -348,7 +391,30 @@ async def get_ai_country_turn(country_stats: dict, all_countries: dict) -> dict:
         # 텍스트 생성 요청
         response_text = await _generate_text_with_retry(prompt, model_name=AI_MODEL)
         
-        clean_json = response_text.replace('```json', '').replace('```', '').strip()
+        # JSON 문자열 추출 및 파싱
+        clean_json = response_text.strip()
+        
+        # JSON 코드 블록 제거
+        if '```json' in clean_json:
+            start = clean_json.find('```json') + 7
+            end = clean_json.find('```', start)
+            if end != -1:
+                clean_json = clean_json[start:end].strip()
+        elif '```' in clean_json:
+            start = clean_json.find('```') + 3
+            end = clean_json.find('```', start)
+            if end != -1:
+                clean_json = clean_json[start:end].strip()
+        
+        # JSON 객체 찾기 (중괄호로 시작하는 부분)
+        start_brace = clean_json.find('{')
+        end_brace = clean_json.rfind('}')
+        if start_brace != -1 and end_brace != -1 and end_brace > start_brace:
+            clean_json = clean_json[start_brace:end_brace + 1]
+        
+        if not clean_json:
+            raise ValueError("응답에서 JSON을 찾을 수 없습니다.")
+        
         result = json.loads(clean_json)
         
         if 'actions' not in result:

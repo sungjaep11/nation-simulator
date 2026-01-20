@@ -1295,6 +1295,7 @@ async def handle_game_turn(
     for (other_country_db, _), ai_turn_data in zip(ai_targets, ai_results):
         # 스탯 업데이트
         other_changes = ai_turn_data.get('changes', {})
+        other_actions = ai_turn_data.get('actions', [])
         
         # changes가 없거나 모두 0이면 더 작은 기본값으로 완만하게 변화
         if not other_changes or all(v == 0 for v in other_changes.values()):
@@ -1306,6 +1307,9 @@ async def handle_game_turn(
             }
             ai_turn_data['changes'] = other_changes
         
+        # Fix: Check if there's an add_military action to avoid double counting
+        other_has_military_action = any(a.get('type') == 'add_military' for a in other_actions)
+        
         # DB에 변화값 저장
         other_country_db.last_finance_change = other_changes.get('finance', 0)
         other_country_db.last_population_change = other_changes.get('population', 0)
@@ -1315,7 +1319,9 @@ async def handle_game_turn(
         # 스탯에 변화값 적용
         other_country_db.finance += other_changes.get('finance', 0)
         other_country_db.population += other_changes.get('population', 0)
-        other_country_db.military += other_changes.get('military', 0)
+        # Fix: Don't add military from changes if there's an add_military action (prevent double counting)
+        if not other_has_military_action:
+            other_country_db.military += other_changes.get('military', 0)
         other_country_db.happiness += other_changes.get('happiness', 0)
         
         # 행복도 100% 제한, 군사력 최소값 0 제한

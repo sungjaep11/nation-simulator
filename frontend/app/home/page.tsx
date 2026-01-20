@@ -833,6 +833,13 @@ export default function Home() {
         prev.map((log) => log.id === loadingLogId ? newLog : log)
       );
 
+      // 로딩 완료 후 스크롤을 맨 아래로 이동
+      setTimeout(() => {
+        if (commandLogsScrollRef.current) {
+          commandLogsScrollRef.current.scrollTop = commandLogsScrollRef.current.scrollHeight;
+        }
+      }, 150);
+
       // 현재 상황 업데이트
       if (data.scenario) {
         setCurrentSituation(data.scenario);
@@ -874,7 +881,7 @@ export default function Home() {
       if (isTurnChanged) {
         prevStatsRef.current = { ...stats };
         prevTurnRef.current = newTurn;
-        // 이전 외교/군사 데이터 저장
+        // 이전 외교/군사 데이터 저장 (새 데이터를 가져오기 전에 현재 데이터를 저장)
         prevDiplomacyDataRef.current = [...diplomacyData];
         prevMilitaryDataRef.current = [...militaryData];
         // 이전 총합 점수 저장
@@ -995,9 +1002,13 @@ export default function Home() {
           if (sessionToken) {
             const militaryResponse = await fetch(`${apiUrl}/api/country/${selectedNation}/military?session_token=${encodeURIComponent(sessionToken)}`);
             if (militaryResponse.ok) {
-              const militaryData = await militaryResponse.json() as MilitaryUnit[];
-              console.log('🔍 군사 데이터 업데이트:', militaryData);
-              setMilitaryData(militaryData);
+              const newMilitaryData = await militaryResponse.json() as MilitaryUnit[];
+              console.log('🔍 군사 데이터 업데이트:', newMilitaryData);
+              setMilitaryData(newMilitaryData);
+              // 턴이 변경되지 않았을 때는 이전 데이터를 현재 데이터로 업데이트 (다음 턴 비교를 위해)
+              if (!isTurnChanged) {
+                prevMilitaryDataRef.current = [...newMilitaryData];
+              }
             } else {
               console.error('군사 데이터 응답 실패:', militaryResponse.status, militaryResponse.statusText);
             }
@@ -1020,6 +1031,13 @@ export default function Home() {
       setCommandLogs((prev) => 
         prev.map((log) => log.id === loadingLogId ? errorLog : log)
       );
+      
+      // 에러 발생 시에도 스크롤을 맨 아래로 이동
+      setTimeout(() => {
+        if (commandLogsScrollRef.current) {
+          commandLogsScrollRef.current.scrollTop = commandLogsScrollRef.current.scrollHeight;
+        }
+      }, 150);
     } finally {
       setIsLoading(false);
     }
@@ -1048,7 +1066,12 @@ export default function Home() {
   // 명령 기록 업데이트 시 스크롤을 맨 밑으로 이동
   useEffect(() => {
     if (commandLogsScrollRef.current) {
-      commandLogsScrollRef.current.scrollTop = commandLogsScrollRef.current.scrollHeight;
+      // DOM 업데이트 후 스크롤 이동을 위해 setTimeout 사용
+      setTimeout(() => {
+        if (commandLogsScrollRef.current) {
+          commandLogsScrollRef.current.scrollTop = commandLogsScrollRef.current.scrollHeight;
+        }
+      }, 100);
     }
   }, [commandLogs]);
 
