@@ -395,13 +395,17 @@ async def verify_google_token(
         # 세션 토큰 생성
         session_token = create_session_token(user_id, user.email)
         
-        # 게임 데이터 확인 및 초기화
+        # 사용자명이 필요한지 확인 (새 사용자이거나 이름이 기본값인 경우)
+        needs_username = is_new_user or (user.name == "User" or not user.name or len(user.name.strip()) < 2)
+        
+        # 게임 데이터 확인 및 초기화 (사용자명이 이미 설정된 경우에만)
         existing_countries = session.exec(
             select(Country).where(Country.user_id == user_id)
         ).first()
         
-        # 게임 데이터가 없으면 초기화 (새 사용자 또는 기존 사용자의 첫 게임)
-        if not existing_countries:
+        # 게임 데이터가 없고 사용자명이 이미 설정된 경우에만 초기화
+        # (사용자명이 필요한 경우는 create-username 페이지에서 초기화됨)
+        if not existing_countries and not needs_username:
             initialize_game_data(session, user_id)
         
         return {
@@ -409,6 +413,7 @@ async def verify_google_token(
             "status": "success",
             "session_token": session_token,
             "is_new_user": is_new_user,
+            "needs_username": needs_username,
             "user": {
                 "id": user.id,
                 "email": user.email,

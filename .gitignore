@@ -14,4 +14,6 @@ backend/.env
 
 # Backend
 *.db
+*.db-wal
+*.db-shm
 *.sqlite3

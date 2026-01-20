@@ -47,6 +47,7 @@ export default function LoginPage() {
       const user = authData.user;
       const sessionToken = authData.session_token;
       const isNewUser = authData.is_new_user || false;
+      const needsUsername = authData.needs_username !== undefined ? authData.needs_username : isNewUser;
 
       // 세션 토큰 및 사용자 정보를 localStorage에 저장
       localStorage.setItem("session_token", sessionToken);
@@ -55,8 +56,8 @@ export default function LoginPage() {
         localStorage.setItem("picture", user.picture);
       }
       
-      // 새 사용자인 경우 사용자명 생성 페이지로, 기존 사용자는 국가 선택 페이지로
-      if (isNewUser) {
+      // 사용자명이 필요한 경우 사용자명 생성 페이지로, 그렇지 않으면 국가 선택 페이지로
+      if (needsUsername) {
         router.push("/create-username");
       } else {
         localStorage.setItem("username", user.name);
