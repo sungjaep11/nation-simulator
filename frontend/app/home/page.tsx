@@ -728,6 +728,7 @@ export default function Home() {
   const [militaryData, setMilitaryData] = useState<MilitaryUnit[]>([]);
   const prevDiplomacyDataRef = useRef<DiplomacyRelation[]>([]);
   const prevMilitaryDataRef = useRef<MilitaryUnit[]>([]);
+  const commandLogsScrollRef = useRef<HTMLDivElement>(null);
 
   const nationInfo = {
     goguryeo: {
@@ -1002,6 +1003,13 @@ export default function Home() {
       prevTurnRef.current = turn;
     }
   }, [turn]);
+
+  // 명령 기록 업데이트 시 스크롤을 맨 밑으로 이동
+  useEffect(() => {
+    if (commandLogsScrollRef.current) {
+      commandLogsScrollRef.current.scrollTop = commandLogsScrollRef.current.scrollHeight;
+    }
+  }, [commandLogs]);
 
   // 백엔드에서 받은 totalScore 사용
   const totalScore = currentTotalScore;
@@ -1543,7 +1551,7 @@ export default function Home() {
                 <h3 className="text-xl font-bold text-[#C9A227] font-serif mb-4 flex items-center gap-2">
                   <span>📜</span> 명령 기록
                 </h3>
-                <div className="max-h-[300px] overflow-y-auto space-y-3">
+                <div ref={commandLogsScrollRef} className="max-h-[300px] overflow-y-auto space-y-3">
                   {commandLogs.length === 0 ? (
                     <p className="text-[#6B6B6B] text-center py-8">
                       아직 내린 명령이 없습니다. 하단의 입력창에서 명령을 입력하세요.
