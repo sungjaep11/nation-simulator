@@ -3796,24 +3796,30 @@ async def set_pre_unification_state(
         ).all()
         
         # 사용자 국가가 거의 모든 영토를 소유하도록 설정
-        # 다른 두 국가는 각각 1개씩만 남김
+        # 자강도만 다른 국가에 할당하고 나머지는 모두 사용자 국가에 할당
         user_owned_provinces = []
         other_country1_provinces = []
         other_country2_provinces = []
         
-        # 영토를 랜덤하게 분배 (사용자: 대부분, 다른 국가1: 1개, 다른 국가2: 1개)
+        # 모든 영토 목록 가져오기
         available_provinces = [t.province_name for t in all_territories]
         
-        if len(available_provinces) < 2:
+        if len(available_provinces) < 1:
             raise HTTPException(status_code=400, detail="영토가 부족합니다.")
         
-        # 다른 국가1에 1개 할당
-        if available_provinces:
-            other_country1_provinces.append(available_provinces.pop(0))
+        # 자강도 찾기
+        chagang_do = None
+        for province in available_provinces:
+            if province == "자강도":
+                chagang_do = province
+                break
         
-        # 다른 국가2에 1개 할당
-        if available_provinces:
-            other_country2_provinces.append(available_provinces.pop(0))
+        if not chagang_do:
+            raise HTTPException(status_code=400, detail="자강도를 찾을 수 없습니다.")
+        
+        # 자강도만 다른 국가1에 할당
+        other_country1_provinces.append(chagang_do)
+        available_provinces.remove(chagang_do)
         
         # 나머지는 모두 사용자 국가에 할당
         user_owned_provinces = available_provinces

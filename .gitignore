@@ -11,6 +11,12 @@ __pycache__/
 
 # Environment variables
 backend/.env
+frontend/.env
+frontend/.env.local
+frontend/.env.development.local
+frontend/.env.test.local
+frontend/.env.production.local
+
 
 # Backend
 *.db
