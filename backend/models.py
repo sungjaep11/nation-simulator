@@ -25,10 +25,20 @@ class Country(SQLModel, table=True):
     last_happiness_change: int = 0
     
     def get_provinces(self) -> List[str]:
-        """보유 영토 목록 반환"""
+        """보유 영토 목록 반환
+        
+        JSON 파싱 실패 시 빈 리스트 반환
+        """
         if not self.provinces:
             return []
-        return json.loads(self.provinces)
+        try:
+            result = json.loads(self.provinces)
+            if isinstance(result, list):
+                return result
+            return []
+        except (json.JSONDecodeError, TypeError) as e:
+            print(f"⚠️ [JSON 오류] provinces 파싱 실패 ({self.id}): {e}")
+            return []
     
     def set_provinces(self, provinces: List[str]):
         """보유 영토 목록 설정"""
@@ -49,19 +59,22 @@ class Country(SQLModel, table=True):
             self.set_provinces(provinces)
     
     def calculate_total_score(self) -> int:
-        """국가의 종합 점수 계산
+        """국가의 종합 점수 계산 (버그 #13 수정: 균형 조정)
         
         재정, 인구, 군사력, 행복도를 종합하여 점수를 산출합니다.
-        - 재정: 100당 1점
-        - 인구: 100당 1점
-        - 군사력: 1당 50점
-        - 행복도: 1당 10점
+        - 재정: 50당 1점 (경제 중요도 상향)
+        - 인구: 50당 1점 (인구 중요도 상향)
+        - 군사력: 1당 20점 (군사력 비중 하향)
+        - 행복도: 1당 15점 (행복도 비중 상향)
+        - 영토: 1개당 100점 (영토 점수 추가)
         """
+        territory_count = len(self.get_provinces())
         score = (
-            (self.finance // 100) +
-            (self.population // 100) +
-            (self.military * 50) +
-            (self.happiness * 10)
+            (self.finance // 50) +
+            (self.population // 50) +
+            (self.military * 20) +
+            (self.happiness * 15) +
+            (territory_count * 100)
         )
         return score
     
@@ -128,7 +141,8 @@ class MilitaryUnit(SQLModel, table=True):
 class Diplomacy(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     sourceID: str = Field(foreign_key="country.id")
-    targetName: str
+    targetID: Optional[str] = Field(default=None, index=True)  # 대상 국가 ID (예: "goguryeo_1")
+    targetName: str  # 대상 국가 표시 이름 (예: "고구려")
     status: str
     favorability: int = 0
 

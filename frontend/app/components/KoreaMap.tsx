@@ -28,6 +28,19 @@ const northKoreaNameMap: Record<string, string> = {
   "Sinŭiju": "신의주시",
 };
 
+// 지도 이름 ↔ DB 이름 매핑 (지도에서 사용하는 이름을 DB에서 사용하는 이름으로 변환)
+// 지도 JSON에는 "강원도"이지만 DB에는 "강원특별자치도"로 저장됨
+const mapToDbNameMapping: Record<string, string> = {
+  "강원도": "강원특별자치도",
+  "전라북도": "전북특별자치도",
+};
+
+// DB 이름 → 지도 이름 역방향 매핑
+const dbToMapNameMapping: Record<string, string> = {
+  "강원특별자치도": "강원도",
+  "전북특별자치도": "전라북도",
+};
+
 // 시도별 삼국 영토 매핑
 const provinceToKingdom: Record<string, "goguryeo" | "baekje" | "silla" | "neutral"> = {
   // 고구려 영토 (북한 지역)
@@ -145,7 +158,19 @@ const KoreaMap = memo(function KoreaMap({
   // 영토 데이터가 있으면 해당 데이터 사용, 없으면 기본 매핑 사용
   const getOwner = (provinceName: string): "goguryeo" | "baekje" | "silla" | "neutral" => {
     if (territories) {
-      const territory = territories.find(t => t.name === provinceName);
+      // 먼저 정확히 일치하는 이름으로 검색
+      let territory = territories.find(t => t.name === provinceName);
+      
+      // 못 찾으면 매핑된 DB 이름으로 검색 (예: "강원도" → "강원특별자치도")
+      if (!territory && mapToDbNameMapping[provinceName]) {
+        territory = territories.find(t => t.name === mapToDbNameMapping[provinceName]);
+      }
+      
+      // 못 찾으면 매핑된 지도 이름으로 검색 (예: "강원특별자치도" → "강원도")
+      if (!territory && dbToMapNameMapping[provinceName]) {
+        territory = territories.find(t => t.name === dbToMapNameMapping[provinceName]);
+      }
+      
       if (territory) return territory.owner;
     }
     return provinceToKingdom[provinceName] || "neutral";

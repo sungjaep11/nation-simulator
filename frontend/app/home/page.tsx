@@ -6,6 +6,80 @@ import Image from "next/image";
 import KoreaMap from "../components/KoreaMap";
 import Character3D from "../components/Character3D";
 
+// ===== 버그 #1 수정: 세션 토큰 자동 갱신 유틸리티 =====
+/**
+ * 401 에러 시 자동으로 토큰을 갱신하고 요청을 재시도하는 래퍼 함수
+ */
+async function fetchWithTokenRefresh(
+  url: string,
+  options: RequestInit = {},
+  router: ReturnType<typeof useRouter>
+): Promise<Response> {
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+  
+  // 첫 번째 시도
+  let response = await fetch(url, options);
+  
+  // 401 에러 시 토큰 갱신 시도
+  if (response.status === 401) {
+    const sessionToken = localStorage.getItem("session_token");
+    
+    if (sessionToken) {
+      try {
+        // 토큰 갱신 요청
+        const refreshResponse = await fetch(`${apiUrl}/api/auth/refresh`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ session_token: sessionToken }),
+        });
+        
+        if (refreshResponse.ok) {
+          const refreshData = await refreshResponse.json();
+          
+          if (refreshData.session_token) {
+            // 새 토큰 저장
+            localStorage.setItem("session_token", refreshData.session_token);
+            console.log("✅ 세션 토큰이 자동으로 갱신되었습니다.");
+            
+            // 원래 요청 재시도 (새 토큰으로)
+            const newUrl = url.replace(
+              /session_token=[^&]*/,
+              `session_token=${encodeURIComponent(refreshData.session_token)}`
+            );
+            
+            // body에 session_token이 있는 경우도 업데이트
+            if (options.body) {
+              try {
+                const bodyData = JSON.parse(options.body as string);
+                if (bodyData.session_token) {
+                  bodyData.session_token = refreshData.session_token;
+                  options.body = JSON.stringify(bodyData);
+                }
+              } catch {
+                // body가 JSON이 아닌 경우 무시
+              }
+            }
+            
+            response = await fetch(newUrl, options);
+          }
+        } else {
+          // 갱신 실패 - 재로그인 필요
+          console.warn("⚠️ 세션 갱신 실패. 다시 로그인해주세요.");
+          localStorage.removeItem("session_token");
+          router.push("/login");
+        }
+      } catch (refreshError) {
+        console.error("토큰 갱신 중 오류:", refreshError);
+      }
+    } else {
+      // 토큰 없음 - 로그인 페이지로
+      router.push("/login");
+    }
+  }
+  
+  return response;
+}
+
 // 국가 타입 정의
 type NationType = "goguryeo" | "baekje" | "silla" | null;
 type NationId = Exclude<NationType, null>;
@@ -38,6 +112,16 @@ interface NewsItem {
   title: string;
   content: string;
   type: "event" | "war" | "diplomacy" | "economy";
+}
+
+// 전투 결과 인터페이스
+interface BattleResult {
+  attacker: string;
+  defender: string;
+  outcome: string;
+  attacker_loss: number;
+  defender_loss?: number;
+  description: string;
 }
 
 const categorizeNewsType = (text: string): NewsItem["type"] => {
@@ -462,8 +546,19 @@ function DiplomacyInfo({
         // 국가 이름을 한글로 변환
         const displayName = getNationNameInKorean(nationId);
         
-        // 외교 상태를 한글로 통일 (neutral -> 중립)
-        const normalizedStatus = relation.status === "neutral" ? "중립" : relation.status;
+        // 외교 상태를 한글로 통일 (버그 #7 수정: 모든 영문 상태 정규화)
+        const statusMap: Record<string, string> = {
+          "neutral": "중립",
+          "alliance": "동맹",
+          "ally": "동맹",
+          "allied": "동맹",
+          "hostile": "적대",
+          "enemy": "적대",
+          "war": "적대",
+          "friendly": "우호",
+          "friend": "우호",
+        };
+        const normalizedStatus = statusMap[relation.status.toLowerCase()] || relation.status;
 
         return (
           <div
@@ -493,11 +588,14 @@ function DiplomacyInfo({
               </div>
               <span
                 className={`text-xs px-2 py-1 rounded whitespace-nowrap min-w-[50px] text-center ${
-                  relation.favorability > 0
-                    ? "bg-green-900/50 text-green-400"
-                    : relation.favorability < -30
-                      ? "bg-red-900/50 text-red-400"
-                      : "bg-yellow-900/50 text-yellow-400"
+                  // 버그 #7 수정: 외교 상태별 색상 표시
+                  normalizedStatus === "동맹"
+                    ? "bg-blue-900/50 text-blue-400"
+                    : normalizedStatus === "우호"
+                      ? "bg-green-900/50 text-green-400"
+                      : normalizedStatus === "적대"
+                        ? "bg-red-900/50 text-red-400"
+                        : "bg-yellow-900/50 text-yellow-400"  // 중립
                 }`}
               >
                 {normalizedStatus}
@@ -692,7 +790,9 @@ export default function Home() {
     }, 3000);
     
     return () => clearInterval(interval);
-  }, [commandLogs, loadingMessages.length]);
+  // 버그 #12 수정: loadingMessages는 상수이므로 의존성에서 제거
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [commandLogs]);
   const prevFinanceRef = useRef(stats.finance);
   const prevStatsRef = useRef<GameStats>({ ...stats });
   const prevTurnRef = useRef(turn);
@@ -734,6 +834,7 @@ export default function Home() {
       type: "diplomacy",
     },
   ]);
+  const [battleResults, setBattleResults] = useState<BattleResult[]>([]);
   const [activeTab, setActiveTab] = useState<"diplomacy" | "military">("diplomacy");
   const [diplomacyData, setDiplomacyData] = useState<DiplomacyRelation[]>([]);
   const [militaryData, setMilitaryData] = useState<MilitaryUnit[]>([]);
@@ -800,22 +901,26 @@ export default function Home() {
     setCommandLogs((prev) => [...prev, loadingLog]);
 
     try {
-      // Backend API 호출
+      // Backend API 호출 (버그 #1 수정: 토큰 자동 갱신 적용)
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
       const sessionToken = localStorage.getItem("session_token");
       if (!sessionToken) {
         throw new Error("세션 토큰이 없습니다. 다시 로그인해주세요.");
       }
       
-      const response = await fetch(`${apiUrl}/api/action`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          user_input: command,
-          country_id: selectedNation,
-          session_token: sessionToken
-        }),
-      });
+      const response = await fetchWithTokenRefresh(
+        `${apiUrl}/api/action`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            user_input: command,
+            country_id: selectedNation,
+            session_token: sessionToken
+          }),
+        },
+        routerRef.current
+      );
 
       if (!response.ok) {
         throw new Error(`API error: ${response.status}`);
@@ -852,27 +957,61 @@ export default function Home() {
         setCurrentSituation(data.scenario);
       }
 
-      // 뉴스 업데이트
+      // 뉴스 업데이트 (내 국가 + AI 국가 뉴스 통합)
+      const allNewsItems: NewsItem[] = [];
+      
+      // 1. 내 국가 뉴스 추가
       if (data.public_news_items && Array.isArray(data.public_news_items)) {
-        setNews(data.public_news_items.map((n: any, i: number): NewsItem => {
+        data.public_news_items.forEach((n: any, i: number) => {
           const newsType: NewsItem["type"] = (n.type === "war" || n.type === "diplomacy" || n.type === "economy") ? n.type : "event";
-          return {
+          allNewsItems.push({
             id: Date.now() + i,
             title: n.title || newsTitleByType[newsType],
             content: n.content ?? n,
             type: newsType,
-          };
-        }));
+          });
+        });
       } else if (data.public_news && Array.isArray(data.public_news)) {
-        setNews(data.public_news.map((n: string, i: number): NewsItem => {
+        data.public_news.forEach((n: string, i: number) => {
           const newsType = categorizeNewsType(n);
-          return {
+          allNewsItems.push({
             id: Date.now() + i,
             title: newsTitleByType[newsType],
             content: n,
             type: newsType,
-          };
-        }));
+          });
+        });
+      }
+      
+      // 2. AI 국가 뉴스 추가 (other_countries의 public_news)
+      if (data.other_countries && typeof data.other_countries === 'object') {
+        Object.entries(data.other_countries).forEach(([nationId, nationData]) => {
+          const typedNationData = nationData as { name?: string; public_news?: string[] };
+          if (typedNationData.public_news && Array.isArray(typedNationData.public_news)) {
+            const nationName = typedNationData.name || nationId;
+            typedNationData.public_news.forEach((newsText: string, i: number) => {
+              const newsType = categorizeNewsType(newsText);
+              allNewsItems.push({
+                id: Date.now() + 1000 + i + Object.keys(data.other_countries).indexOf(nationId) * 100,
+                title: `[${nationName}] ${newsTitleByType[newsType]}`,
+                content: newsText,
+                type: newsType,
+              });
+            });
+          }
+        });
+      }
+      
+      // 뉴스 설정 (내 국가 + AI 국가 뉴스 모두)
+      if (allNewsItems.length > 0) {
+        setNews(allNewsItems);
+      }
+
+      // 전투 결과 업데이트
+      if (data.battle_results && Array.isArray(data.battle_results)) {
+        setBattleResults(data.battle_results);
+      } else {
+        setBattleResults([]);  // 전투가 없으면 빈 배열
       }
 
       // 턴 업데이트 확인 (스탯 업데이트 전에)
@@ -883,10 +1022,10 @@ export default function Home() {
         newTurn = turn + 1;
       }
       
-      // 턴이 변경되면 이전 stats 및 외교/군사 데이터 저장
+      // 턴이 변경되면 이전 stats 및 외교/군사 데이터 저장 (버그 #11 수정)
       const isTurnChanged = newTurn !== prevTurnRef.current;
       if (isTurnChanged) {
-        prevStatsRef.current = { ...stats };
+        // 이전 턴 번호 업데이트
         prevTurnRef.current = newTurn;
         // 이전 외교/군사 데이터 저장 (새 데이터를 가져오기 전에 현재 데이터를 저장)
         prevDiplomacyDataRef.current = [...diplomacyData];
@@ -894,6 +1033,9 @@ export default function Home() {
         // 이전 총합 점수 저장
         prevTotalScoreRef.current = totalScore;
       }
+      
+      // 버그 #11 수정: 이전 스탯은 업데이트 직전에 저장 (새 데이터 적용 전)
+      prevStatsRef.current = { ...stats };
 
       // 스탯 업데이트
       setStats((prev) => {
@@ -938,6 +1080,88 @@ export default function Home() {
         setTurn(data.updated_stats.turn);
       } else {
         setTurn((prev) => prev + 1);
+      }
+
+      // 🔴 [High Priority Fix] API 응답에서 직접 영토 정보 추출하여 즉시 업데이트
+      // /api/action 응답에는 updated_stats.provinces와 other_countries에 영토 정보가 포함됨
+      // 별도 /api/territories API 호출 전에 먼저 이 데이터로 즉시 반영
+      let territoryUpdateSuccess = false;
+      try {
+        if (data.updated_stats?.provinces || data.other_countries) {
+          // 현재 territories 복사본 생성
+          const updatedTerritories = [...territories];
+          
+          // 내 국가 영토 업데이트
+          if (data.updated_stats?.provinces && Array.isArray(data.updated_stats.provinces) && selectedNation) {
+            // 기존 내 국가 소유 영토를 모두 neutral로 변경 (후에 다시 설정)
+            updatedTerritories.forEach(t => {
+              if (t.owner === selectedNation) {
+                t.owner = "neutral";
+              }
+            });
+            
+            // 새로운 영토 소유권 설정
+            data.updated_stats.provinces.forEach((provinceName: string) => {
+              const existingTerritory = updatedTerritories.find(t => t.name === provinceName);
+              if (existingTerritory) {
+                existingTerritory.owner = selectedNation;
+              } else {
+                // 새 영토가 목록에 없으면 추가
+                updatedTerritories.push({
+                  id: `new_${Date.now()}_${provinceName}`,
+                  name: provinceName,
+                  owner: selectedNation,
+                });
+              }
+            });
+          }
+          
+          // 다른 국가들의 영토 업데이트 (selectedNation은 이미 위에서 처리했으므로 제외)
+          if (data.other_countries && typeof data.other_countries === 'object') {
+            Object.entries(data.other_countries).forEach(([nationId, nationData]) => {
+              // 내 국가는 이미 처리했으므로 중복 처리 방지
+              if (nationId === selectedNation) {
+                return;
+              }
+              
+              const typedNationData = nationData as { provinces?: string[] };
+              if (typedNationData.provinces && Array.isArray(typedNationData.provinces)) {
+                const owner = (nationId === "goguryeo" || nationId === "baekje" || nationId === "silla") 
+                  ? nationId as "goguryeo" | "baekje" | "silla" 
+                  : "neutral";
+                
+                // 해당 국가 소유 영토를 neutral로 초기화
+                updatedTerritories.forEach(t => {
+                  if (t.owner === owner) {
+                    t.owner = "neutral";
+                  }
+                });
+                
+                // 새로운 영토 소유권 설정
+                typedNationData.provinces.forEach((provinceName: string) => {
+                  const existingTerritory = updatedTerritories.find(t => t.name === provinceName);
+                  if (existingTerritory) {
+                    existingTerritory.owner = owner;
+                  } else {
+                    updatedTerritories.push({
+                      id: `new_${Date.now()}_${provinceName}`,
+                      name: provinceName,
+                      owner: owner,
+                    });
+                  }
+                });
+              }
+            });
+          }
+          
+          // 즉시 영토 상태 업데이트 (지도에 바로 반영)
+          setTerritories(updatedTerritories);
+          territoryUpdateSuccess = true;
+          console.log("🗺️ [영토 즉시 반영] API 응답에서 영토 정보 추출 완료:", updatedTerritories.length, "개 영토");
+        }
+      } catch (territoryUpdateError) {
+        console.warn("API 응답에서 영토 정보 추출 실패:", territoryUpdateError);
+        territoryUpdateSuccess = false;
       }
       
       // 모든 국가의 점수 및 통계 업데이트
@@ -1024,59 +1248,93 @@ export default function Home() {
           console.warn("군사 데이터 업데이트 실패:", militaryError);
         }
         
-        // 영토 소유권 데이터 가져오기
-        try {
-          const sessionToken = localStorage.getItem("session_token");
-          if (sessionToken) {
-            const territoriesResponse = await fetch(`${apiUrl}/api/territories?session_token=${encodeURIComponent(sessionToken)}`);
-            if (territoriesResponse.ok) {
-              const territoriesData = await territoriesResponse.json() as Array<{id: number; name: string; owner: string}>;
-              const newTerritories = territoriesData.map(t => ({
-                id: String(t.id),
-                name: t.name,
-                owner: (t.owner === "goguryeo" || t.owner === "baekje" || t.owner === "silla" ? t.owner : "neutral") as "goguryeo" | "baekje" | "silla" | "neutral"
-              }));
-              setTerritories(newTerritories);
-              
-              // 정복된 나라 확인 및 스탯 0으로 설정
-              const conqueredNations: NationId[] = [];
-              const allNations: NationId[] = ["goguryeo", "baekje", "silla"];
-              
-              allNations.forEach((nation) => {
-                const hasTerritory = newTerritories.some(t => t.owner === nation);
-                if (!hasTerritory) {
-                  conqueredNations.push(nation);
-                }
-              });
-              
-              // 정복된 나라의 스탯을 0으로 설정
-              if (conqueredNations.length > 0) {
-                setAllNationStats((prevStats) => {
-                  const updatedStats = { ...prevStats };
-                  conqueredNations.forEach((nation) => {
-                    updatedStats[nation] = {
-                      finance: 0,
-                      population: 0,
-                      happiness: 0,
-                      military: 0,
-                    };
-                  });
-                  return updatedStats;
+        // 영토 소유권 데이터 가져오기 (폴백: API 응답에서 직접 추출이 실패한 경우에만 호출)
+        // 🟢 [Low Priority Fix] 이미 성공적으로 추출한 경우 추가 API 호출 생략
+        if (!territoryUpdateSuccess) {
+          try {
+            const sessionToken = localStorage.getItem("session_token");
+            if (sessionToken) {
+              const territoriesResponse = await fetch(`${apiUrl}/api/territories?session_token=${encodeURIComponent(sessionToken)}`);
+              if (territoriesResponse.ok) {
+                const territoriesData = await territoriesResponse.json() as Array<{id: number; name: string; owner: string}>;
+                const newTerritories = territoriesData.map(t => ({
+                  id: String(t.id),
+                  name: t.name,
+                  owner: (t.owner === "goguryeo" || t.owner === "baekje" || t.owner === "silla" ? t.owner : "neutral") as "goguryeo" | "baekje" | "silla" | "neutral"
+                }));
+                
+                setTerritories(newTerritories);
+                console.log("🗺️ [영토 폴백 업데이트] Territory 테이블에서 최신 데이터 로드:", newTerritories.length, "개 영토");
+                
+                // 정복된 나라 확인 및 스탯 0으로 설정
+                const conqueredNations: NationId[] = [];
+                const allNations: NationId[] = ["goguryeo", "baekje", "silla"];
+                
+                allNations.forEach((nation) => {
+                  const hasTerritory = newTerritories.some(t => t.owner === nation);
+                  if (!hasTerritory) {
+                    conqueredNations.push(nation);
+                  }
                 });
                 
-                // 정복된 나라의 점수도 0으로 설정
-                setAllNationScores((prevScores) => {
-                  const updatedScores = { ...prevScores };
-                  conqueredNations.forEach((nation) => {
-                    updatedScores[nation] = 0;
+                // 정복된 나라의 스탯을 0으로 설정
+                if (conqueredNations.length > 0) {
+                  setAllNationStats((prevStats) => {
+                    const updatedStats = { ...prevStats };
+                    conqueredNations.forEach((nation) => {
+                      updatedStats[nation] = {
+                        finance: 0,
+                        population: 0,
+                        happiness: 0,
+                        military: 0,
+                      };
+                    });
+                    return updatedStats;
                   });
-                  return updatedScores;
-                });
+                  
+                  // 정복된 나라의 점수도 0으로 설정
+                  setAllNationScores((prevScores) => {
+                    const updatedScores = { ...prevScores };
+                    conqueredNations.forEach((nation) => {
+                      updatedScores[nation] = 0;
+                    });
+                    return updatedScores;
+                  });
+                }
               }
             }
+          } catch (territoriesError) {
+            console.warn("영토 데이터 폴백 업데이트 실패:", territoriesError);
           }
-        } catch (territoriesError) {
-          console.warn("영토 데이터 업데이트 실패:", territoriesError);
+        } else {
+          // API 응답에서 이미 영토 업데이트 성공 - 정복된 나라 확인 로직만 실행
+          const allNations: NationId[] = ["goguryeo", "baekje", "silla"];
+          const conqueredNations = allNations.filter(nation => 
+            !territories.some(t => t.owner === nation)
+          );
+          
+          if (conqueredNations.length > 0) {
+            setAllNationStats((prevStats) => {
+              const updatedStats = { ...prevStats };
+              conqueredNations.forEach((nation) => {
+                updatedStats[nation] = {
+                  finance: 0,
+                  population: 0,
+                  happiness: 0,
+                  military: 0,
+                };
+              });
+              return updatedStats;
+            });
+            
+            setAllNationScores((prevScores) => {
+              const updatedScores = { ...prevScores };
+              conqueredNations.forEach((nation) => {
+                updatedScores[nation] = 0;
+              });
+              return updatedScores;
+            });
+          }
         }
       }
     } catch (error) {
@@ -1928,6 +2186,54 @@ export default function Home() {
                     <NewsCard key={item.id} news={item} index={index} />
                   ))}
                 </div>
+              </section>
+
+              {/* 전투 결과 */}
+              <section className="glass-panel rounded-xl p-6">
+                <h3 className="text-xl font-bold text-[#C9A227] font-serif mb-4 flex items-center gap-2">
+                  <span>⚔️</span> 전투 결과
+                </h3>
+                {battleResults.length === 0 ? (
+                  <div className="text-center py-6">
+                    <p className="text-[#6B6B6B]">🕊️ 이번 턴에는 전투가 발생하지 않았습니다.</p>
+                    <p className="text-[#8B8B8B] text-sm mt-2">평화로운 시기입니다.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {battleResults.map((battle, index) => (
+                      <div 
+                        key={index}
+                        className={`p-4 rounded-lg border-l-4 ${
+                          battle.outcome === "승리" 
+                            ? "bg-green-900/30 border-green-500" 
+                            : battle.outcome === "패배" 
+                            ? "bg-red-900/30 border-red-500"
+                            : "bg-yellow-900/30 border-yellow-500"
+                        } animate-fade-in-up opacity-0`}
+                        style={{ animationDelay: `${index * 100}ms`, animationFillMode: 'forwards' }}
+                      >
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className="text-xl">
+                            {battle.outcome === "승리" ? "🏆" : battle.outcome === "패배" ? "💀" : "⚔️"}
+                          </span>
+                          <span className="text-[#F5F5DC] font-semibold">
+                            {battle.attacker} vs {battle.defender}
+                          </span>
+                          <span className={`text-sm px-2 py-0.5 rounded ${
+                            battle.outcome === "승리" 
+                              ? "bg-green-600 text-white" 
+                              : battle.outcome === "패배"
+                              ? "bg-red-600 text-white"
+                              : "bg-yellow-600 text-white"
+                          }`}>
+                            {battle.outcome}
+                          </span>
+                        </div>
+                        <p className="text-[#A89F91] text-sm">{battle.description}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </section>
 
               {/* 명령 기록 */}

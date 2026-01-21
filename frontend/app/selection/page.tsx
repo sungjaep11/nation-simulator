@@ -79,7 +79,7 @@ const defaultCountries: Country[] = [
     color: "#C41E3A",
     description:
       "강력한 군사력과 광활한 영토를 자랑하는 고구려는 철기병과 산성 전술로 유명합니다.",
-    stats: { finance: 15000, population: 80000, military: 15 },
+    stats: { finance: 5000, population: 5000, military: 20 },
     feature: "강력한 군사력",
   },
   {
@@ -90,7 +90,7 @@ const defaultCountries: Country[] = [
     color: "#1E90FF",
     description:
       "해상 무역과 문화 예술이 발달한 백제는 일본, 중국과의 교류가 활발합니다.",
-    stats: { finance: 18000, population: 60000, military: 10 },
+    stats: { finance: 26000, population: 4000, military: 15 },
     feature: "풍부한 재정",
   },
   {
@@ -101,7 +101,7 @@ const defaultCountries: Country[] = [
     color: "#FFD700",
     description:
       "화랑도의 충성과 백성들의 단결력으로 무장한 신라는 성장 중인 국가입니다.",
-    stats: { finance: 12000, population: 45000, military: 12 },
+    stats: { finance: 20000, population: 50000, military: 10 },
     feature: "높은 단결력",
   },
 ];

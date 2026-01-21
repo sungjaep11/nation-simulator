@@ -3,10 +3,10 @@
 사용자 데이터 초기화 스크립트
 
 사용법:
-    python reset_user_data.py <user_id>
-    
-또는 모든 사용자 데이터 초기화:
-    python reset_user_data.py --all
+    python reset_user_data.py <user_id>          - 사용자 ID로 초기화
+    python reset_user_data.py --email <email>    - 이메일로 초기화
+    python reset_user_data.py --all              - 모든 사용자 데이터 초기화
+    python reset_user_data.py --list             - 사용자 목록 보기
 """
 
 import sys
@@ -97,12 +97,29 @@ def list_users():
         print("-" * 80)
         print(f"총 {len(users)}명의 사용자")
 
+def reset_user_by_email(email: str):
+    """이메일로 사용자의 게임 데이터를 초기화합니다."""
+    with Session(engine) as session:
+        try:
+            user = session.exec(select(User).where(User.email == email)).first()
+        except Exception as e:
+            print(f"❌ 데이터베이스 오류: {e}")
+            return False
+        
+        if not user:
+            print(f"❌ 이메일 '{email}'에 해당하는 사용자를 찾을 수 없습니다.")
+            print("💡 사용자 목록을 보려면: python reset_user_data.py --list")
+            return False
+        
+        return reset_user_data(user.id)
+
 if __name__ == "__main__":
     if len(sys.argv) < 2:
         print("사용법:")
-        print("  python reset_user_data.py <user_id>     - 특정 사용자 데이터 초기화")
-        print("  python reset_user_data.py --all         - 모든 사용자 데이터 초기화")
-        print("  python reset_user_data.py --list        - 사용자 목록 보기")
+        print("  python reset_user_data.py <user_id>          - 특정 사용자 데이터 초기화 (ID로)")
+        print("  python reset_user_data.py --email <email>    - 특정 사용자 데이터 초기화 (이메일로)")
+        print("  python reset_user_data.py --all              - 모든 사용자 데이터 초기화")
+        print("  python reset_user_data.py --list             - 사용자 목록 보기")
         sys.exit(1)
     
     arg = sys.argv[1]
@@ -111,6 +128,13 @@ if __name__ == "__main__":
         reset_all_users()
     elif arg == "--list":
         list_users()
+    elif arg == "--email":
+        if len(sys.argv) < 3:
+            print("❌ 이메일 주소를 입력해주세요.")
+            print("사용법: python reset_user_data.py --email <email>")
+            sys.exit(1)
+        email = sys.argv[2]
+        reset_user_by_email(email)
     else:
         try:
             user_id = int(arg)
@@ -118,4 +142,5 @@ if __name__ == "__main__":
         except ValueError:
             print(f"❌ 잘못된 사용자 ID: {arg}")
             print("사용자 ID는 숫자여야 합니다.")
+            print("이메일로 초기화하려면: python reset_user_data.py --email <email>")
             sys.exit(1)
