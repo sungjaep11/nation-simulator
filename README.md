@@ -2,7 +2,7 @@
 
 > **"고구려, 백제, 신라의 군주가 되어 AI가 빚어내는 역사의 흐름을 주도하라!"**
 
-삼한일류(三韓一流)는 Gemma 기반 생성형 AI를 탑재한 웹 기반 국가 경영 시뮬레이션 게임입니다. 플레이어는 삼국의 군주 중 한 명을 선택하여 자연어 명령을 통해 국가를 운영하고, 실시간으로 변화하는 시나리오 속에서 한반도 통일의 대업을 완수해야 합니다.
+'삼한일류(三韓一流)'는 Gemma 기반 생성형 AI를 탑재한 웹 기반 국가 경영 시뮬레이션 게임입니다. 플레이어는 삼국의 군주 중 한 명을 선택하여 자연어 명령을 통해 국가를 운영하고, 실시간으로 변화하는 시나리오 속에서 한반도 통일의 대업을 완수해야 합니다.
 
 ---
 
@@ -102,8 +102,8 @@ npm run dev
 
 
 * **박찬우 (Park Chanwoo)**
-    * 고려대학교 컴퓨터학과 (Computer Science and Engineering)
-* [GitHub](https://github.com/onff02) | yetpi0413@korea.ac.kr
+  * 고려대학교 컴퓨터학과 (Computer Science and Engineering)
+  * [GitHub](https://github.com/onff02) | yetpi0413@korea.ac.kr
 
 
 
