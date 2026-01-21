@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Image from "next/image";
 import KoreaMap from "../components/KoreaMap";
@@ -742,7 +742,7 @@ function MilitaryInfo({
   );
 }
 
-export default function Home() {
+function HomeContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const routerRef = useRef(router);
@@ -2468,5 +2468,20 @@ export default function Home() {
       </div>
     </div>
     </>
+  );
+}
+
+export default function Home() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-[#0d0d0d] flex items-center justify-center">
+        <div className="text-center">
+          <div className="loading-spinner mx-auto mb-4" style={{ width: "40px", height: "40px" }}></div>
+          <p className="text-[#C9A227]">로딩 중...</p>
+        </div>
+      </div>
+    }>
+      <HomeContent />
+    </Suspense>
   );
 }
