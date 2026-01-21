@@ -49,6 +49,8 @@ export default function LoginPage() {
       const isNewUser = authData.is_new_user || false;
       // 새 사용자는 항상 사용자명 입력 필요, 기존 사용자는 needs_username 값 확인
       const needsUsername = isNewUser || (authData.needs_username !== undefined ? authData.needs_username : false);
+      const hasGameData = authData.has_game_data || false;
+      const selectedCountryId = authData.selected_country_id || null;
 
       // 세션 토큰 및 사용자 정보를 localStorage에 저장
       localStorage.setItem("session_token", sessionToken);
@@ -57,8 +59,13 @@ export default function LoginPage() {
         localStorage.setItem("picture", user.picture);
       }
       
-      // 사용자명이 필요한 경우 사용자명 생성 페이지로, 그렇지 않으면 국가 선택 페이지로
-      if (needsUsername) {
+      // 게임 데이터가 있으면 바로 게임 화면으로, 사용자명이 필요하면 사용자명 생성 페이지로, 그렇지 않으면 국가 선택 페이지로
+      if (hasGameData && selectedCountryId) {
+        // 게임 데이터가 있으면 나라 선택 없이 바로 게임 화면으로
+        localStorage.setItem("username", user.name);
+        localStorage.setItem(`selected_country:${user.email}`, selectedCountryId);
+        router.push(`/home?nation=${selectedCountryId}`);
+      } else if (needsUsername) {
         router.push("/create-username");
       } else {
         localStorage.setItem("username", user.name);

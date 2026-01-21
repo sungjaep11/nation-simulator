@@ -141,7 +141,6 @@ class MilitaryUnit(SQLModel, table=True):
 class Diplomacy(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     sourceID: str = Field(foreign_key="country.id")
-    targetID: Optional[str] = Field(default=None, index=True)  # 대상 국가 ID (예: "goguryeo_1")
     targetName: str  # 대상 국가 표시 이름 (예: "고구려")
     status: str
     favorability: int = 0

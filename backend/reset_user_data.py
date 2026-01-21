@@ -21,6 +21,8 @@ create_db_and_tables()
 
 def reset_user_data(user_id: int):
     """특정 사용자의 게임 데이터를 초기화합니다."""
+    from sqlalchemy import delete
+    
     with Session(engine) as session:
         # 사용자 존재 확인
         try:
@@ -35,14 +37,67 @@ def reset_user_data(user_id: int):
             print("💡 사용자 목록을 보려면: python reset_user_data.py --list")
             return False
         
-        print(f"🔄 사용자 '{user.name}' (ID: {user_id}, Email: {user.email})의 게임 데이터를 초기화합니다...")
+        print(f"🔄 사용자 '{user.name}' (ID: {user_id}, Email: {user.email})의 게임 데이터 및 계정 정보를 초기화합니다...")
         
         try:
-            initialize_game_data(session, user_id)
-            print(f"✅ 사용자 '{user.name}'의 게임 데이터가 성공적으로 초기화되었습니다.")
+            # 이메일 저장 (삭제 후 확인용)
+            user_email = user.email
+            
+            # 해당 사용자의 기존 게임 데이터 삭제 (국가 생성 없이)
+            user_countries = session.exec(select(Country).where(Country.user_id == user_id)).all()
+            country_ids = [c.id for c in user_countries]
+            
+            if country_ids:
+                # CommandLog bulk delete
+                session.exec(delete(CommandLog).where(CommandLog.countryID.in_(country_ids)))  # type: ignore
+                # NewsItem bulk delete
+                session.exec(delete(NewsItem).where(NewsItem.countryID.in_(country_ids)))  # type: ignore
+                # SecretIntelligence bulk delete
+                session.exec(delete(SecretIntelligence).where(SecretIntelligence.countryID.in_(country_ids)))  # type: ignore
+                # MilitaryUnit bulk delete
+                session.exec(delete(MilitaryUnit).where(MilitaryUnit.countryID.in_(country_ids)))  # type: ignore
+                # Diplomacy bulk delete
+                session.exec(delete(Diplomacy).where(Diplomacy.sourceID.in_(country_ids)))  # type: ignore
+                # 해당 사용자의 국가 이름 목록으로 targetName 기준 삭제
+                country_names = [c.name for c in user_countries]
+                if country_names:
+                    session.exec(delete(Diplomacy).where(Diplomacy.targetName.in_(country_names)))  # type: ignore
+                # Country bulk delete
+                session.exec(delete(Country).where(Country.user_id == user_id))  # type: ignore
+                
+                print(f"🗑️ [데이터 초기화] 사용자 {user_id}의 기존 게임 데이터 삭제 완료")
+            
+            # Territory bulk delete
+            session.exec(delete(Territory).where(Territory.user_id == user_id))  # type: ignore
+            
+            # 사용자 계정 정보 삭제 (일반 회원가입 정보 포함)
+            # session.delete()를 사용하여 더 확실하게 삭제
+            session.delete(user)
+            
+            # 커밋
+            session.commit()
+            
+            # 삭제 확인
+            deleted_user = session.exec(select(User).where(User.id == user_id)).first()
+            if deleted_user:
+                print(f"⚠️  경고: 사용자 삭제 후에도 여전히 존재합니다. 강제 삭제를 시도합니다...")
+                session.delete(deleted_user)
+                session.commit()
+            
+            # 이메일로도 확인
+            email_check = session.exec(select(User).where(User.email == user_email)).first()
+            if email_check:
+                print(f"⚠️  경고: 이메일 '{user_email}'로 사용자가 여전히 존재합니다. 강제 삭제를 시도합니다...")
+                session.delete(email_check)
+                session.commit()
+            
+            print(f"✅ 사용자 '{user.name}' (Email: {user_email})의 게임 데이터 및 계정 정보가 성공적으로 삭제되었습니다.")
+            print("💡 해당 사용자는 완전히 삭제되었으며, 다시 회원가입이 필요합니다.")
             return True
         except Exception as e:
             print(f"❌ 초기화 중 오류 발생: {e}")
+            import traceback
+            print(traceback.format_exc())
             return False
 
 def reset_all_users():

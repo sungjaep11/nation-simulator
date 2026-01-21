@@ -884,10 +884,10 @@ def check_and_handle_country_defeat(country: Country, session: Session, user_id:
         for d in diplomacy_as_source:
             session.delete(d)
         
-        # 외교 관계 삭제 (target 기준 - targetID 또는 targetName으로 검색)
+        # 외교 관계 삭제 (target 기준 - targetName으로 검색)
         diplomacy_as_target = session.exec(
             select(Diplomacy).where(
-                (Diplomacy.targetID == country.id) | (Diplomacy.targetName == country.name)
+                Diplomacy.targetName == country.name
             )
         ).all()
         for d in diplomacy_as_target:
@@ -1030,33 +1030,36 @@ async def verify_google_token(
         # 게임 데이터 확인 (사용자명 결정 전에 먼저 확인)
         existing_countries = session.exec(
             select(Country).where(Country.user_id == user_id)
-        ).first()
+        ).all()
         
-        # 사용자명이 필요한지 확인
-        # 1. 새 사용자는 항상 사용자명 입력 필요
-        # 2. 기존 사용자도 이름이 기본값이거나 너무 짧으면 사용자명 입력 필요
-        # 3. 게임 데이터가 없으면 사용자명 입력 필요 (reset_user_data.py 실행 후 등)
-        needs_username = (
-            is_new_user or 
-            (user.name == "User" or not user.name or len(user.name.strip()) < 2) or
-            (not existing_countries)  # 게임 데이터가 없으면 사용자명 입력 페이지로
-        )
+        # 구글 로그인 시 항상 사용자명 입력 페이지로 보냄
+        needs_username = True
         
-        # 새 사용자인 경우 항상 사용자명 입력 페이지로 보냄 (Google name이 있어도)
-        if is_new_user:
-            needs_username = True
+        # 게임 데이터가 있는지 확인
+        has_game_data = len(existing_countries) > 0
+        
+        # 게임 데이터가 있으면 사용자가 선택한 국가 ID 추출 (첫 번째 국가의 기본 ID에서 user_id 부분 제거)
+        selected_country_id = None
+        if has_game_data and existing_countries:
+            # 첫 번째 국가의 ID에서 user_id 부분 제거 (예: 'goguryeo_1' -> 'goguryeo')
+            first_country_id = existing_countries[0].id
+            if '_' in first_country_id:
+                selected_country_id = first_country_id.rsplit('_', 1)[0]
+            else:
+                selected_country_id = first_country_id
         
         # 게임 데이터가 없고 사용자명이 이미 설정된 경우에만 초기화
         # (사용자명이 필요한 경우는 create-username 페이지에서 초기화됨)
-        if not existing_countries and not needs_username:
+        if not has_game_data and not needs_username:
             initialize_game_data(session, user_id)
         
-        return {
+        response_data = {
             "message": "Google 로그인 성공",
             "status": "success",
             "session_token": session_token,
             "is_new_user": is_new_user,
             "needs_username": needs_username,
+            "has_game_data": has_game_data,
             "user": {
                 "id": user.id,
                 "email": user.email,
@@ -1064,6 +1067,12 @@ async def verify_google_token(
                 "picture": user.picture
             }
         }
+        
+        # 게임 데이터가 있으면 선택된 국가 ID도 반환
+        if selected_country_id:
+            response_data["selected_country_id"] = selected_country_id
+        
+        return response_data
             
     except HTTPException:
         raise
@@ -1609,9 +1618,13 @@ def initialize_game_data(session: Session, user_id: int):
         session.exec(delete(SecretIntelligence).where(SecretIntelligence.countryID.in_(country_ids)))  # type: ignore
         # MilitaryUnit bulk delete
         session.exec(delete(MilitaryUnit).where(MilitaryUnit.countryID.in_(country_ids)))  # type: ignore
-        # Diplomacy bulk delete (sourceID 또는 targetID 기준)
+        # Diplomacy bulk delete (sourceID 또는 targetName 기준)
+        # targetID는 Optional이고 DB에 없을 수 있으므로 targetName 사용
         session.exec(delete(Diplomacy).where(Diplomacy.sourceID.in_(country_ids)))  # type: ignore
-        session.exec(delete(Diplomacy).where(Diplomacy.targetID.in_(country_ids)))  # type: ignore
+        # 해당 사용자의 국가 이름 목록으로 targetName 기준 삭제
+        country_names = [c.name for c in user_countries]
+        if country_names:
+            session.exec(delete(Diplomacy).where(Diplomacy.targetName.in_(country_names)))  # type: ignore
         # Country bulk delete
         session.exec(delete(Country).where(Country.user_id == user_id))  # type: ignore
         
@@ -2497,7 +2510,7 @@ async def handle_game_turn(
                     "defender": target_country_name,
                     "outcome": "승리",
                     "attacker_loss": attacker_military_loss,
-                    "description": f"⚔️ {country.name}이(가) {target_country_name}과의 전투에서 승리! (아군 피해: {attacker_military_loss}명)"
+                    "description": f"⚔️ {country.name}가 {target_country_name}과의 전투에서 승리! (아군 피해: {attacker_military_loss}명)"
                 })
             elif outcome == "패배":
                 # 패배 시 큰 피해
@@ -2511,7 +2524,7 @@ async def handle_game_turn(
                     "defender": target_country_name,
                     "outcome": "패배",
                     "attacker_loss": attacker_military_loss,
-                    "description": f"💀 {country.name}이(가) {target_country_name}과의 전투에서 패배... (아군 피해: {attacker_military_loss}명)"
+                    "description": f"💀 {country.name}가 {target_country_name}과의 전투에서 패배... (아군 피해: {attacker_military_loss}명)"
                 })
             # 군사력 최소값 0 제한 (패배 시에만 적용, 승리 시는 위에서 처리)
             if outcome != "승리":
@@ -2692,18 +2705,26 @@ async def handle_game_turn(
             if outcome == "승리":
                 attacker_military_loss = int(casualties * 0.4)
                 if captured_provinces:
-                    province_list = ", ".join(captured_provinces)
-                    war_result_news = f"{country_display_name}이(가) {target_country_name}과의 전쟁에서 승리하여 {province_list} 지역을 점령했습니다. (병력 손실: {attacker_military_loss}명)"
+                    # captured_provinces가 리스트가 아니거나 문자열이 아닌 경우 처리
+                    if not isinstance(captured_provinces, list):
+                        captured_provinces = [str(captured_provinces)] if captured_provinces else []
+                    else:
+                        captured_provinces = [str(p) for p in captured_provinces if p]
+                    if captured_provinces:
+                        province_list = ", ".join(captured_provinces)
+                        war_result_news = f"{country_display_name}가 {target_country_name}과의 전쟁에서 승리하여 {province_list} 지역을 점령했습니다. (병력 손실: {attacker_military_loss}명)"
+                    else:
+                        war_result_news = f"{country_display_name}가 {target_country_name}과의 전쟁에서 승리했습니다. (병력 손실: {attacker_military_loss}명)"
                 elif land_gained > 0:
-                    war_result_news = f"{country_display_name}이(가) {target_country_name}과의 전쟁에서 승리하여 {land_gained}개 영토를 획득했습니다. (병력 손실: {attacker_military_loss}명)"
+                    war_result_news = f"{country_display_name}가 {target_country_name}과의 전쟁에서 승리하여 {land_gained}개 영토를 획득했습니다. (병력 손실: {attacker_military_loss}명)"
                 else:
                     war_result_news = f"{country_display_name}이(가) {target_country_name}과의 전쟁에서 승리했습니다. (병력 손실: {attacker_military_loss}명)"
             elif outcome == "패배":
                 attacker_military_loss = int(casualties * 0.8)
                 if land_lost > 0:
-                    war_result_news = f"{country_display_name}이(가) {target_country_name}과의 전쟁에서 패배하여 {land_lost}개 영토를 잃었습니다. (병력 손실: {attacker_military_loss}명)"
+                    war_result_news = f"{country_display_name}가 {target_country_name}과의 전쟁에서 패배하여 {land_lost}개 영토를 잃었습니다. (병력 손실: {attacker_military_loss}명)"
                 else:
-                    war_result_news = f"{country_display_name}이(가) {target_country_name}과의 전쟁에서 패배했습니다. (병력 손실: {attacker_military_loss}명)"
+                    war_result_news = f"{country_display_name}가 {target_country_name}과의 전쟁에서 패배했습니다. (병력 손실: {attacker_military_loss}명)"
             else:
                 war_result_news = f"{country_display_name}과 {target_country_name}의 전쟁이 무승부로 끝났습니다. (양측 병력 손실: {casualties}명)"
             
@@ -3215,10 +3236,18 @@ async def handle_game_turn(
                 # AI 국가 전쟁 결과 뉴스 생성 및 battle_results 추가
                 if outcome == "승리":
                     if captured_provinces:
-                        province_list = ", ".join(captured_provinces)
-                        ai_war_news = f"{other_country_db.name}이(가) {target_country_name}과의 전쟁에서 승리하여 {province_list} 지역을 점령했습니다. (병력 손실: {ai_attacker_military_loss}명)"
+                        # captured_provinces가 리스트가 아니거나 문자열이 아닌 경우 처리
+                        if not isinstance(captured_provinces, list):
+                            captured_provinces = [str(captured_provinces)] if captured_provinces else []
+                        else:
+                            captured_provinces = [str(p) for p in captured_provinces if p]
+                        if captured_provinces:
+                            province_list = ", ".join(captured_provinces)
+                            ai_war_news = f"{other_country_db.name}가 {target_country_name}과의 전쟁에서 승리하여 {province_list} 지역을 점령했습니다. (병력 손실: {ai_attacker_military_loss}명)"
+                        else:
+                            ai_war_news = f"{other_country_db.name}가 {target_country_name}과의 전쟁에서 승리했습니다. (병력 손실: {ai_attacker_military_loss}명)"
                     elif land_gained > 0:
-                        ai_war_news = f"{other_country_db.name}이(가) {target_country_name}과의 전쟁에서 승리하여 {land_gained}개 영토를 획득했습니다. (병력 손실: {ai_attacker_military_loss}명)"
+                        ai_war_news = f"{other_country_db.name}가 {target_country_name}과의 전쟁에서 승리하여 {land_gained}개 영토를 획득했습니다. (병력 손실: {ai_attacker_military_loss}명)"
                     else:
                         ai_war_news = f"{other_country_db.name}이(가) {target_country_name}과의 전쟁에서 승리했습니다. (병력 손실: {ai_attacker_military_loss}명)"
                     
@@ -3229,13 +3258,13 @@ async def handle_game_turn(
                         "outcome": "승리",
                         "attacker_loss": ai_attacker_military_loss,
                         "defender_loss": ai_defender_military_loss,
-                        "description": f"⚔️ {other_country_db.name}이(가) {target_country_name}을(를) 공격하여 승리! (공격자 피해: {ai_attacker_military_loss}명, 방어자 피해: {ai_defender_military_loss}명)"
+                        "description": f"⚔️ {other_country_db.name}가 {target_country_name}을(를) 공격하여 승리! (공격자 피해: {ai_attacker_military_loss}명, 방어자 피해: {ai_defender_military_loss}명)"
                     })
                 elif outcome == "패배":
                     if land_lost > 0:
-                        ai_war_news = f"{other_country_db.name}이(가) {target_country_name}과의 전쟁에서 패배하여 {land_lost}개 영토를 잃었습니다. (병력 손실: {ai_attacker_military_loss}명)"
+                        ai_war_news = f"{other_country_db.name}가 {target_country_name}과의 전쟁에서 패배하여 {land_lost}개 영토를 잃었습니다. (병력 손실: {ai_attacker_military_loss}명)"
                     else:
-                        ai_war_news = f"{other_country_db.name}이(가) {target_country_name}과의 전쟁에서 패배했습니다. (병력 손실: {ai_attacker_military_loss}명)"
+                        ai_war_news = f"{other_country_db.name}가 {target_country_name}과의 전쟁에서 패배했습니다. (병력 손실: {ai_attacker_military_loss}명)"
                     
                     # battle_results에 AI 패배 추가
                     battle_results.append({
