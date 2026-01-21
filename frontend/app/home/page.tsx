@@ -312,6 +312,7 @@ function StatItem({
   statType,
   selectedNation,
   turn,
+  onClick,
 }: {
   icon: string;
   label: string;
@@ -330,6 +331,7 @@ function StatItem({
   statType?: "finance" | "population" | "happiness" | "military" | "totalScore" | "turn";
   selectedNation?: NationType;
   turn?: number;
+  onClick?: () => void;
 }) {
   const [showTooltip, setShowTooltip] = useState(false);
   
@@ -363,12 +365,18 @@ function StatItem({
 
   const ranking = getRankingData();
 
+  const isClickable = statType === "turn" && onClick !== undefined;
+  
   return (
     <div 
-      className="relative flex items-center gap-2 px-4 py-2 glass-panel rounded-lg hover:border-[#C9A227]/50 transition-all duration-300 hover:z-[999999]"
+      className={`relative flex items-center gap-2 px-4 py-2 glass-panel rounded-lg transition-all duration-300 hover:z-[999999] ${
+        isClickable ? "cursor-pointer hover:border-[#C9A227] hover:bg-[#C9A227]/10" : "hover:border-[#C9A227]/50"
+      }`}
       onMouseEnter={() => setShowTooltip(true)}
       onMouseLeave={() => setShowTooltip(false)}
+      onClick={isClickable ? onClick : undefined}
       style={{ zIndex: showTooltip ? 999999 : 'auto' }}
+      title={isClickable ? "클릭하여 삼국통일 직전 상태로 설정" : undefined}
     >
       <span className="text-xl">{icon}</span>
       <div className="flex flex-col">
@@ -1363,6 +1371,45 @@ export default function Home() {
     }
   }, [commandInput, isLoading, selectedNation, nationInfo]);
 
+  // 삼국통일 직전 상태로 설정하는 함수
+  const handleSetPreUnification = useCallback(async () => {
+    if (!selectedNation) return;
+    
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+      const sessionToken = localStorage.getItem("session_token");
+      if (!sessionToken) {
+        alert("세션 토큰이 없습니다. 다시 로그인해주세요.");
+        return;
+      }
+      
+      const response = await fetchWithTokenRefresh(
+        `${apiUrl}/api/set-pre-unification`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            country_id: selectedNation,
+            session_token: sessionToken
+          }),
+        },
+        routerRef.current
+      );
+      
+      if (!response.ok) {
+        throw new Error(`API error: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      
+      // 페이지 새로고침하여 변경된 상태 반영
+      window.location.reload();
+    } catch (error) {
+      console.error("삼국통일 직전 상태 설정 실패:", error);
+      alert("삼국통일 직전 상태 설정 중 오류가 발생했습니다.");
+    }
+  }, [selectedNation]);
+
   // 재정 변화 감지
   useEffect(() => {
     if (prevFinanceRef.current < stats.finance) {
@@ -2132,6 +2179,7 @@ export default function Home() {
               statType="turn"
               selectedNation={selectedNation}
               turn={turn}
+              onClick={handleSetPreUnification}
             />
           </div>
         </div>
@@ -2181,11 +2229,20 @@ export default function Home() {
                 <h3 className="text-xl font-bold text-[#C9A227] font-serif mb-4 flex items-center gap-2">
                   <span>📰</span> 금일의 소식
                 </h3>
-                <div className="grid grid-cols-1 gap-4">
-                  {news.map((item, index) => (
+                {/* 국내 소식 (type === "event") */}
+                <div className="grid grid-cols-3 gap-4 mb-4">
+                  {news.filter(item => item.type === "event").map((item, index) => (
                     <NewsCard key={item.id} news={item} index={index} />
                   ))}
                 </div>
+                {/* 나머지 소식들 (2xn 그리드) */}
+                {news.filter(item => item.type !== "event").length > 0 && (
+                  <div className="grid grid-cols-2 gap-4">
+                    {news.filter(item => item.type !== "event").map((item, index) => (
+                      <NewsCard key={item.id} news={item} index={index + news.filter(i => i.type === "event").length} />
+                    ))}
+                  </div>
+                )}
               </section>
 
               {/* 전투 결과 */}

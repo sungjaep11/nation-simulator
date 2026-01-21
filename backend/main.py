@@ -1997,7 +1997,7 @@ async def handle_game_turn(
         country_display_name = country_names.get(country_original_id, country.name)
         
         # 기본 뉴스 생성
-        default_news = f"{country_display_name}이(가) 안정적으로 발전하고 있습니다."
+        default_news = f"{country_display_name}가 안정적으로 발전하고 있습니다."
         public_news_list = [default_news]
     
     for news_text in public_news_list:
@@ -2804,16 +2804,13 @@ async def handle_game_turn(
             print(f"⚠️ [AI 성장 제한] {other_country_db.name} 행복도 증가 제한: {other_changes['happiness']} -> {AI_MAX_HAPPINESS_GAIN}")
             other_changes['happiness'] = AI_MAX_HAPPINESS_GAIN
         
-        # ===== 버그 #8 수정: AI 전쟁 빈도 제한 =====
-        # AI가 매 턴 전쟁을 선포하는 것을 방지 (3턴에 1번만 허용)
-        AI_WAR_COOLDOWN_TURNS = 3
-        if other_country_db.turn % AI_WAR_COOLDOWN_TURNS != 0:
-            # 전쟁 쿨다운 중이면 war 액션 제거
-            original_action_count = len(other_actions)
-            other_actions = [a for a in other_actions if a.get('type') != 'war']
-            if len(other_actions) < original_action_count:
-                print(f"⚠️ [AI 전쟁 제한] {other_country_db.name} 전쟁 쿨다운 중 (턴 {other_country_db.turn}). war 액션 제거됨")
-            ai_turn_data['actions'] = other_actions
+        # ===== AI 전쟁 액션 완전 제거 =====
+        # AI 국가가 먼저 공격하는 기능을 제거 (AI는 방어만 함)
+        original_action_count = len(other_actions)
+        other_actions = [a for a in other_actions if a.get('type') != 'war']
+        if len(other_actions) < original_action_count:
+            print(f"⚠️ [AI 전쟁 제한] {other_country_db.name}의 war 액션이 제거되었습니다. AI 국가는 먼저 공격하지 않습니다.")
+        ai_turn_data['actions'] = other_actions
         
         # ===== 버그 #5 수정: AI add_military 액션 제한 =====
         # AI가 너무 많은 병력을 모집하는 것을 방지
@@ -2895,7 +2892,7 @@ async def handle_game_turn(
         
         # public_news가 비어있거나 없으면 기본 뉴스 생성
         if not ai_public_news_list or len(ai_public_news_list) == 0:
-            ai_public_news_list = [f"{other_country_db.name}이(가) 안정적으로 발전하고 있습니다."]
+            ai_public_news_list = [f"{other_country_db.name}가 안정적으로 발전하고 있습니다."]
         
         for news_text in ai_public_news_list:
             news_type = categorize_news(news_text)
@@ -3754,3 +3751,125 @@ async def add_military_unit(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"군대 유닛 추가 중 오류가 발생했습니다: {str(e)}")
+
+@app.post("/api/set-pre-unification")
+async def set_pre_unification_state(
+    country_id: str = Body(..., embed=True),
+    session_token: str = Body(..., embed=True),
+    session: Session = Depends(get_session)
+):
+    """삼국통일 직전 상태로 게임 설정 (엔딩 녹화용)"""
+    try:
+        # 세션 토큰에서 사용자 ID 추출
+        token_payload = verify_session_token(session_token)
+        user_id = token_payload.get("user_id")
+        
+        if not user_id:
+            raise HTTPException(status_code=401, detail="유효하지 않은 세션 토큰입니다.")
+        
+        # 프론트엔드에서 받은 country_id를 사용자별 고유 ID로 변환
+        user_specific_country_id = f"{country_id}_{user_id}"
+        
+        # 사용자 국가 조회
+        user_country = session.exec(
+            select(Country).where(
+                (Country.id == user_specific_country_id) & (Country.user_id == user_id)
+            )
+        ).first()
+        
+        if not user_country:
+            raise HTTPException(status_code=404, detail="국가를 찾을 수 없습니다.")
+        
+        # 다른 두 국가 조회
+        all_countries = session.exec(
+            select(Country).where(Country.user_id == user_id)
+        ).all()
+        
+        other_countries = [c for c in all_countries if c.id != user_specific_country_id]
+        
+        if len(other_countries) != 2:
+            raise HTTPException(status_code=400, detail="다른 국가를 찾을 수 없습니다.")
+        
+        # 모든 영토 조회
+        all_territories = session.exec(
+            select(Territory).where(Territory.user_id == user_id)
+        ).all()
+        
+        # 사용자 국가가 거의 모든 영토를 소유하도록 설정
+        # 다른 두 국가는 각각 1개씩만 남김
+        user_owned_provinces = []
+        other_country1_provinces = []
+        other_country2_provinces = []
+        
+        # 영토를 랜덤하게 분배 (사용자: 대부분, 다른 국가1: 1개, 다른 국가2: 1개)
+        available_provinces = [t.province_name for t in all_territories]
+        
+        if len(available_provinces) < 2:
+            raise HTTPException(status_code=400, detail="영토가 부족합니다.")
+        
+        # 다른 국가1에 1개 할당
+        if available_provinces:
+            other_country1_provinces.append(available_provinces.pop(0))
+        
+        # 다른 국가2에 1개 할당
+        if available_provinces:
+            other_country2_provinces.append(available_provinces.pop(0))
+        
+        # 나머지는 모두 사용자 국가에 할당
+        user_owned_provinces = available_provinces
+        
+        # 영토 소유권 업데이트
+        for territory in all_territories:
+            if territory.province_name in user_owned_provinces:
+                territory.owner = country_id
+            elif territory.province_name in other_country1_provinces:
+                # other_countries[0]의 기본 ID 추출
+                base_id1 = other_countries[0].id.rsplit("_", 1)[0] if "_" in other_countries[0].id else other_countries[0].id
+                territory.owner = base_id1
+            elif territory.province_name in other_country2_provinces:
+                # other_countries[1]의 기본 ID 추출
+                base_id2 = other_countries[1].id.rsplit("_", 1)[0] if "_" in other_countries[1].id else other_countries[1].id
+                territory.owner = base_id2
+        
+        # 국가의 provinces 업데이트
+        user_country.set_provinces(user_owned_provinces)
+        other_countries[0].set_provinces(other_country1_provinces)
+        other_countries[1].set_provinces(other_country2_provinces)
+        
+        # 스탯을 높게 설정 (삼국통일 직전 상태)
+        user_country.finance = 50000
+        user_country.population = 100000
+        user_country.happiness = 80
+        user_country.military = 50
+        user_country.turn = 25  # 적절한 턴 수로 설정
+        user_country.update_total_score()
+        
+        # 다른 국가들은 약하게 설정
+        for other_country in other_countries:
+            other_country.finance = 5000
+            other_country.population = 5000
+            other_country.happiness = 30
+            other_country.military = 5
+            other_country.turn = 25
+            other_country.update_total_score()
+        
+        session.commit()
+        
+        return {
+            "message": "삼국통일 직전 상태로 설정되었습니다.",
+            "user_country": {
+                "id": country_id,
+                "provinces": user_owned_provinces,
+                "stats": {
+                    "finance": user_country.finance,
+                    "population": user_country.population,
+                    "happiness": user_country.happiness,
+                    "military": user_country.military,
+                    "turn": user_country.turn
+                }
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"상태 설정 중 오류가 발생했습니다: {str(e)}")

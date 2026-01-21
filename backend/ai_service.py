@@ -96,7 +96,7 @@ def _get_mock_response(user_input: str, current_stats: dict) -> dict:
     return {
         "scenario": f"⚠️ AI 시스템 오류로 인해 '{user_input}' 명령을 처리할 수 없습니다. {country_name}은(는) 현상 유지 중입니다. 다음 턴에 다시 시도해주세요.",
         "mood": "neutral",
-        "public_news": [f"{country_name}이(가) 안정적으로 유지되고 있습니다."],
+        "public_news": [f"{country_name}가 안정적으로 유지되고 있습니다."],
         "secret_news": [],
         "changes": {"finance": 0, "population": 0, "military": 0, "happiness": 0},
         "actions": []
@@ -328,7 +328,7 @@ async def get_gemini_game_data(user_input: str, current_stats: dict, all_countri
         # public_news가 비어있거나 없으면 기본 뉴스 생성
         if not result.get('public_news') or len(result.get('public_news', [])) == 0:
             country_name = current_stats.get('name', '국가')
-            result['public_news'] = [f"{country_name}이(가) 안정적으로 발전하고 있습니다."]
+            result['public_news'] = [f"{country_name}가 안정적으로 발전하고 있습니다."]
         if 'secret_news' not in result:
             result['secret_news'] = []
         if 'mood' not in result:
@@ -420,16 +420,15 @@ async def get_ai_country_turn(country_stats: dict, all_countries: dict) -> dict:
 [다른 국가들] {json.dumps(other_countries_with_info, ensure_ascii=False)}
 {ai_war_predictions}
 
-**[중요] 위 [전쟁 예상 결과]를 반드시 따르세요! 전쟁 시 해당 결과에 맞게 scenario와 outcome을 작성하세요. 패배 예상인 상대에게 전쟁을 걸지 마세요!**
+**[중요] AI 국가는 먼저 공격하지 않습니다. war 액션을 생성하지 마세요.**
 
 ### AI 전략 지침 ###
 1. 자율적 의사결정:
    - **적극적인 플레이를 권장합니다. 매 턴마다 의미있는 액션을 취하세요.**
-   - 상황에 따라 내정, 외교, 군사 증강, 전쟁 중 적절히 선택
-   - 약한 국가가 있으면 적극적으로 도발하고 전쟁을 고려하세요
+   - 상황에 따라 내정, 외교, 군사 증강 중 적절히 선택
    - 외교 관계에 따라 동맹 또는 협력 결정 (배신은 15%의 확률로)
-   - 군사력이 우위일 때 전쟁 적극 고려
-   - **전쟁은 자주 발생해야 합니다 (30% 확률로 전쟁 시도)**
+   - **중요: AI 국가는 먼저 공격하지 않습니다. 전쟁(war) 액션을 생성하지 마세요.**
+   - 방어적 입장을 유지하며 내정과 외교에 집중하세요
 
 2. 수치 설정 (균형잡힌 성장):
    - 적극적인 행동(전쟁, 개혁, 건설): 중간 변화 (finance/population: -50~50, happiness: -15~15, military: -2~2)
@@ -449,23 +448,18 @@ async def get_ai_country_turn(country_stats: dict, all_countries: dict) -> dict:
 
 4. 액션 선택 (적극적으로):
    - add_military: **5턴에 한 번 정도**, **유닛명을 구체적으로 (철기병, 궁병, 해군 등), 수량은 3~5명 정도. unit_type은 "regular", "spy", "navy" 중 하나**
-   - **전쟁을 자주 시도하세요! 30% 확률로 전쟁 선포**
-   - war: **위 [전쟁 예상 결과]를 반드시 따르세요! 승리 예상인 상대에게만 전쟁을 걸고, 패배 예상인 상대에게는 전쟁을 걸지 마세요!**
-     * war 액션 시 land_gained/land_lost는 1~3 영토. captured_provinces에 실제 점령한 적국 영토명 명시 필수!
-   - **[매우 중요] war 액션의 target 필드는 반드시 국가명(고구려/백제/신라)만 사용! 지역명(경상북도, 함경도 등)은 절대 사용 금지!**
+   - **중요: war 액션은 생성하지 마세요. AI 국가는 먼저 공격하지 않습니다.**
    - diplomacy: **50% 확률로 성공(favorability +15~25) 또는 실패(favorability -10~15), status는 반드시 한글 "동맹", "중립", "적대" 사용**
-   - **[매우 중요] diplomacy 액션의 target 필드도 반드시 국가명(고구려/백제/신라)만 사용! 지역명 절대 금지!**
+   - **[매우 중요] diplomacy 액션의 target 필드는 반드시 국가명(고구려/백제/신라)만 사용! 지역명 절대 금지!**
    - **액션을 적극적으로 사용하세요! 매 턴마다 1~2개의 액션을 취하는 것이 좋습니다.**
-   - **war 액션 시 "captured_provinces": []가 되면 안됨! ** 적국의 provinces 목록에서만 선택 가능. captured_provinces 개수 = land_gained 값과 일치해야 함
 
 5. **활발한 게임 진행 (중요!)**:
    - 적극적으로 행동하세요! 보수적인 플레이보다 역동적인 플레이가 좋습니다.
    - 인과관계의 명확성: 모든 수치 변화(changes)와 액션(actions)은 앞서 작성한 scenario와 논리적으로 일치해야 합니다.
-   - 전쟁을 자주 선포하세요! AI 국가들끼리의 전쟁도 활발하게 발생해야 합니다.
+   - **중요: AI 국가는 먼저 공격하지 않으므로 war 액션을 생성하지 마세요.**
    - 외교는 정확히 50% 확률로 성공/실패
    - **군사 증강은 5턴에 한 번 정도. 수량은 3~5명 정도로 제한**
    - **행복도는 크게 변동시키세요! -20 ~ +20 범위로 드라마틱하게**
-   - 전쟁 casualties는 50~200명 정도
    - **중요: 이 함수는 AI가 자율적으로 운영하는 국가의 턴을 처리합니다. 유저 명령과는 무관합니다.**
    - **교역/무역 활동 시 finance는 반드시 양수(+)가 되어야 합니다.**
 
@@ -483,11 +477,10 @@ async def get_ai_country_turn(country_stats: dict, all_countries: dict) -> dict:
     "actions": [
         {{"type": "add_military", "name": "철기병", "count": 15, "icon": "🐎", "unit_type": "regular"}},
         {{"type": "add_military", "name": "해군", "count": 10, "icon": "⛵", "unit_type": "navy"}},
-        {{"type": "war", "target": "고구려 또는 백제 또는 신라 (국가명만 허용!)", "outcome": "승리", "land_gained": 2, "land_lost": 0, "casualties": 100, "captured_provinces": ["경기도", "인천광역시"]}},
         {{"type": "diplomacy", "target": "국가명", "status": "동맹", "favorability": 25}}
      * status는 반드시 한글 "동맹", "중립", "적대" 중 하나 사용
      * add_military는 매우 드물게만 포함 (대부분의 턴에는 actions가 비어있거나 다른 액션만 포함)
-     * war 액션의 captured_provinces는 실제로 점령한 적국 영토명 리스트 (적국의 provinces에서 선택, 시나리오와 일치해야 함)
+     * **중요: war 액션은 생성하지 마세요. AI 국가는 먼저 공격하지 않습니다.**
     ]
 }}
 
@@ -516,7 +509,7 @@ async def get_ai_country_turn(country_stats: dict, all_countries: dict) -> dict:
             result['public_news'] = result.get('news', [])
         # public_news가 비어있거나 없으면 기본 뉴스 생성
         if not result.get('public_news') or len(result.get('public_news', [])) == 0:
-            result['public_news'] = [f"{country_stats.get('name', '국가')}이(가) 안정적으로 발전하고 있습니다."]
+            result['public_news'] = [f"{country_stats.get('name', '국가')}가 안정적으로 발전하고 있습니다."]
         if 'secret_news' not in result:
             result['secret_news'] = []
         if 'mood' not in result:
@@ -530,9 +523,9 @@ async def get_ai_country_turn(country_stats: dict, all_countries: dict) -> dict:
         # 기본 턴 진행 (버그 #2 수정: 변화 없는 중립적 응답)
         # AI API 실패 시 게임 상태를 변경하지 않도록 모든 변화값을 0으로 설정
         return {
-            "scenario": f"{country_stats['name']}이(가) 내정에 집중하며 현상 유지 중입니다.",
+            "scenario": f"{country_stats['name']}가 내정에 집중하며 현상 유지 중입니다.",
             "mood": "neutral",
-            "public_news": [f"{country_stats['name']}이(가) 안정적으로 유지되고 있습니다."],
+            "public_news": [f"{country_stats['name']}가 안정적으로 유지되고 있습니다."],
             "secret_news": [],
             "changes": {"finance": 0, "population": 0, "military": 0, "happiness": 0},
             "actions": []
